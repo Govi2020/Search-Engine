@@ -1,7 +1,9 @@
 use crate::schema::{Entry, Site};
 use mongodb::bson::doc;
-use mongodb::options::{ClientOptions,ReturnDocument,FindOneAndUpdateOptions};
-use mongodb::{Client, Collection};
+use mongodb::bson::oid::ObjectId;
+
+use mongodb::options::{ClientOptions, FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use mongodb::{Client, Collection, IndexModel};
 use std::collections::HashMap;
 
 pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>) {
@@ -11,11 +13,52 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>) {
 
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
+    // Init Database and Collection
     let db = client.database("SearchEngine");
     let entries: Collection<Entry> = db.collection("entries");
     let sites: Collection<Site> = db.collection("sites");
 
+    // Init Indexes
+    create_indexes(&entries).await;
+
     (entries, sites)
+}
+
+
+async fn create_indexes(collection: &Collection<Entry>) {
+    let index = IndexModel::builder()
+        .keys(doc! {
+            "text": 1
+        })
+        .options(
+            IndexOptions::builder()
+                .unique(true)
+                .build()
+        )
+        .build();
+
+    collection
+        .create_index(index)
+        .await
+        .unwrap();
+}
+
+pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Entry {
+    let filter = doc! {
+        "text": text
+    };
+
+    entries.find_one(filter).await.unwrap().unwrap()
+}
+
+pub async fn get_site(sites: Collection<Site>, site_id: &str) -> Site {
+    let site_id = ObjectId::parse_str(site_id).unwrap();
+
+    let filter = doc! {
+        "_id": site_id
+    };
+
+    sites.find_one(filter).await.unwrap().unwrap()
 }
 
 pub async fn create_site(
@@ -45,7 +88,6 @@ pub async fn create_site(
         }
     };
 
-
     let options = FindOneAndUpdateOptions::builder()
         .upsert(true)
         .return_document(ReturnDocument::After)
@@ -58,9 +100,7 @@ pub async fn create_site(
     {
         Ok(result) => {
             if let Some(doc) = result {
-                return doc.id
-                    .map(|id| id.to_hex())
-                    .unwrap_or_default();
+                return doc.id.map(|id| id.to_hex()).unwrap_or_default();
             }
             String::new()
         }
@@ -98,8 +138,6 @@ pub async fn create_entry(
             }
         },
     };
-
-
 
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)

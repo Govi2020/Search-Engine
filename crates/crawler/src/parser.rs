@@ -1,5 +1,4 @@
-use crate::constants;
-use scraper::{Html, Selector};
+use scraper::{ElementRef, Html, Node, Selector};
 use std::collections::HashMap;
 
 pub fn get_html_parser(html: &str) -> Html {
@@ -8,13 +7,40 @@ pub fn get_html_parser(html: &str) -> Html {
 
 pub fn get_text_only(document: &Html) -> String {
 
-    let body_selector = Selector::parse("body").unwrap();
+    let root_document = document.root_element();
 
-    if let Some(body) = document.select(&body_selector).next() {
-        return body.text().collect::<Vec<_>>().join(" ");
-    } else {
-        return document.root_element().text().collect::<Vec<_>>().join(" ");
+    let mut output_text = String::new();
+
+    get_child_text(root_document,&mut output_text);
+
+    return output_text;
+
+}
+
+fn get_child_text(element: ElementRef,output: &mut String) {
+    for child in element.children() {
+            match child.value() {
+                Node::Text(text) => {
+                    output.push_str(text);
+                    output.push(' ');
+                }
+
+                Node::Element(_) => {
+                    if let Some(child_element) = ElementRef::wrap(child) {
+                        let tag = child_element.value().name();
+
+                        if tag == "script" || tag == "style" || tag == "head" || tag =="meta" || tag == "canvas" || tag =="iframe" || tag =="svg" || tag == "noscript" || tag == "template" {
+                            continue;
+                        }
+
+                        get_child_text(child_element, output);
+                    }
+                }
+
+                _ => {}
+            }
     }
+
 }
 
 pub fn get_meta_data(document: &Html)  -> HashMap<String, String> {
@@ -56,7 +82,11 @@ pub fn get_link_list(document: &Html,base_url: &str) -> Vec<String> {
 
         let abs_url_handle = base.join(href);
 
-        if let Ok(abs_url) = abs_url_handle {
+
+        if let Ok(mut abs_url) = abs_url_handle {
+            abs_url.set_query(None);
+            abs_url.set_fragment(None);
+
             link_list.push(abs_url.to_string());
         }
     }
@@ -64,35 +94,6 @@ pub fn get_link_list(document: &Html,base_url: &str) -> Vec<String> {
     return link_list;
 }
 
-pub fn remove_unneeded_words(html_text: &str) -> String {
-    let stop_words = constants::get_stop_words();
-    let mut result   = html_text.to_string();
-
-    let re_patterns = vec![
-        ".", ",", "!", "?", ";", ":", "(", ")", "[", "]", "{", "}", "\"", "'", "-", "_", "/",
-        "\\", "@", "#", "$", "%", "^", "&", "*", "+", "=", "<", ">", "|", "~", "`",
-    ];
-
-    for pattern in re_patterns {
-        result = result.replace(pattern, "");
-    }
-
-    let words: Vec<&str> = result.split_whitespace().collect();
-    let filtered: Vec<&str> = words
-        .into_iter()
-        .filter(|w| !stop_words.contains(*w))
-        .collect();
-
-    return filtered.join(" ");
-}
-
-pub fn tokonize(html_text: &str) -> Vec<String> {
-    return html_text
-        .split_whitespace()
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_lowercase())
-        .collect();
-}
 
 pub fn arrange_count(words: Vec<String>) -> HashMap<String, i32> {
     let mut word_freq_count: HashMap<String, i32> = HashMap::new();

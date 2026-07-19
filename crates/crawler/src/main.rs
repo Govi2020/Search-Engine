@@ -1,13 +1,17 @@
-mod constants;
-mod database;
 mod fetcher;
 mod parser;
 mod robots;
-mod schema;
+
+use database_helper::database;
+use database_helper::schema::Entry;
+use database_helper::schema::Site;
+use common::constants;
+use common::utils;
 
 use dashmap::DashMap;
 use mongodb::Collection;
-use schema::{Entry, Site};
+use robots::RobotsWrapper;
+use url::Url;
 use std::collections::{HashMap} ;
 use std::sync::Arc;
 use std::fs::File;
@@ -17,9 +21,17 @@ use reqwest::Client;
 #[tokio::main]
 async fn main() {
     let (entries, sites) = database::initialize_mongodb().await;
+
     let entries = Arc::new(entries);
     let sites = Arc::new(sites);
     let visited_urls: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
+
+    let robots_list : Arc<DashMap<String,RobotsWrapper>> = Arc::new(DashMap::new());
+
+    let path = std::env::current_dir().unwrap();
+
+    println!("Running from: {}", path.display());
+
 
     // Seed Url File
     let seed_file = File::open("seed.txt").unwrap();
@@ -42,6 +54,7 @@ async fn main() {
         let entries = Arc::clone(&entries);
         let sites = Arc::clone(&sites);
         let visited_urls = Arc::clone(&visited_urls);
+        let robots_list = Arc::clone(&robots_list);
         let client = Arc::clone(&client);
 
 
@@ -51,6 +64,7 @@ async fn main() {
                 entries,
                 sites,
                 visited_urls,
+                robots_list,
                 client
             ).await
         }));
@@ -69,18 +83,46 @@ async fn crawl_page(
     entries: Arc<Collection<Entry>>,
     sites: Arc<Collection<Site>>,
     visited_urls: Arc<DashMap<String, bool>>,
+    robots_list: Arc<DashMap<String,RobotsWrapper>>,
     client: Arc<Client>
 ) {
+
+    let origin = Url::parse(&url).unwrap().origin().ascii_serialization();
+
+
+    // Checking The Robots.txt
+
+    if (robots_list.contains_key(&origin)) {
+        let robots = robots_list.get(&origin).unwrap();
+        println!("contains");
+
+        if !robots.is_allowed(&url) {
+            return;
+        }
+    }else {
+        let robots : RobotsWrapper = robots::get_robots(&url, &client).await;
+
+
+
+        if !robots.is_allowed(&url) {
+            return;
+        }
+
+        robots_list.insert(url.clone(), robots);
+    }
+
+
+
+    // Checking for Duplicate Scraping
     if visited_urls.contains_key(&url) {
         println!("Duplicate Key {:?} in Cache", url);
         return;
     }
-
-
     if database::does_site_exists(&sites, &url).await {
         println!("Duplicate Key {:?} in DataBase", url);
         return;
     }
+
 
     println!("Scraping URL : {}", url);
 
@@ -91,6 +133,10 @@ async fn crawl_page(
             return;
         }
     };
+
+    if html == "" {
+        return;
+    }
 
     let (meta_data, link_list, word_scores) = process_html(&html,&url);
     let site_id = database::create_site((*sites).clone(), &url, meta_data, link_list.clone())
@@ -112,6 +158,7 @@ async fn crawl_page(
         let sites = Arc::clone(&sites);
         let visited_urls = Arc::clone(&visited_urls);
         let client = Arc::clone(&client);
+        let robots_list = Arc::clone(&robots_list);
         let url = url.to_string();
 
         tasks.push(tokio::spawn(async move {
@@ -120,6 +167,7 @@ async fn crawl_page(
                 entries,
                 sites,
                 visited_urls,
+                robots_list,
                 client
             ).await
         }));
@@ -140,9 +188,9 @@ fn process_html(html: &str,url: &str) -> (HashMap<String, String>, Vec<String>, 
 
     let html_text_content: String = parser::get_text_only(&document);
 
-    let clean_text : String = parser::remove_unneeded_words(&html_text_content);
+    let clean_text : String = utils::remove_unneeded_words(&html_text_content);
 
-    let word_tokens = parser::tokonize(&clean_text);
+    let word_tokens = utils::tokonize(&clean_text);
     let word_freq_count : HashMap<String, i32> = parser::arrange_count(word_tokens.clone());
 
     let word_scores: Vec<(String, i32, i32)> = word_tokens

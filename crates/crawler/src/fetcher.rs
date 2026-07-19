@@ -1,5 +1,5 @@
-use crate::constants::{CUSTOM_USER_AGENT};
-use reqwest::{Client, header::USER_AGENT};
+use common::constants::{CUSTOM_USER_AGENT};
+use reqwest::{Client, header::USER_AGENT,header::CONTENT_TYPE};
 use std::sync::Arc;
 
 pub async fn get_html_from_url(
@@ -13,5 +13,12 @@ pub async fn get_html_from_url(
         .send()
         .await?;
 
+    if let Some(content_type) = response.headers().get(CONTENT_TYPE) {
+        let content_type = content_type.to_str().unwrap();
+
+        if !(content_type.contains("text/html") ||  content_type.contains("application/xhtml+xml") || content_type.contains("text/plain")) {
+            return Ok("".to_string());
+        }
+    }
     response.text().await
 }

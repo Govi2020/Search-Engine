@@ -4,10 +4,9 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WordInfo {
-    count: i32,
-    importance: i32,
+    pub count: i32,
+    pub importance: i32,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {

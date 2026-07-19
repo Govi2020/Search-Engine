@@ -1,0 +1,9 @@
+[package]
+name = "database_helper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bson = "3.1.0"
+mongodb = "3"
+serde = { version = "1", features = ["derive"] }

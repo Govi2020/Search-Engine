@@ -1,6 +1,10 @@
 target/
 
 
+front-end/node_modules
+
+
+
 *~
 *.swp
 *.swo
