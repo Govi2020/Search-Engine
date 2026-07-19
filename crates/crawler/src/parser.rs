@@ -6,45 +6,50 @@ pub fn get_html_parser(html: &str) -> Html {
 }
 
 pub fn get_text_only(document: &Html) -> String {
-
     let root_document = document.root_element();
 
     let mut output_text = String::new();
 
-    get_child_text(root_document,&mut output_text);
+    get_child_text(root_document, &mut output_text);
 
     return output_text;
-
 }
 
-fn get_child_text(element: ElementRef,output: &mut String) {
+fn get_child_text(element: ElementRef, output: &mut String) {
     for child in element.children() {
-            match child.value() {
-                Node::Text(text) => {
-                    output.push_str(text);
-                    output.push(' ');
-                }
-
-                Node::Element(_) => {
-                    if let Some(child_element) = ElementRef::wrap(child) {
-                        let tag = child_element.value().name();
-
-                        if tag == "script" || tag == "style" || tag == "head" || tag =="meta" || tag == "canvas" || tag =="iframe" || tag =="svg" || tag == "noscript" || tag == "template" {
-                            continue;
-                        }
-
-                        get_child_text(child_element, output);
-                    }
-                }
-
-                _ => {}
+        match child.value() {
+            Node::Text(text) => {
+                output.push_str(text);
+                output.push(' ');
             }
-    }
 
+            Node::Element(_) => {
+                if let Some(child_element) = ElementRef::wrap(child) {
+                    let tag = child_element.value().name();
+
+                    if tag == "script"
+                        || tag == "style"
+                        || tag == "head"
+                        || tag == "meta"
+                        || tag == "canvas"
+                        || tag == "iframe"
+                        || tag == "svg"
+                        || tag == "noscript"
+                        || tag == "template"
+                    {
+                        continue;
+                    }
+
+                    get_child_text(child_element, output);
+                }
+            }
+
+            _ => {}
+        }
+    }
 }
 
-pub fn get_meta_data(document: &Html)  -> HashMap<String, String> {
-
+pub fn get_meta_data(document: &Html) -> HashMap<String, String> {
     let mut meta_data = HashMap::new();
 
     let title_selector = Selector::parse("title").unwrap();
@@ -67,7 +72,7 @@ pub fn get_meta_data(document: &Html)  -> HashMap<String, String> {
     return meta_data;
 }
 
-pub fn get_link_list(document: &Html,base_url: &str) -> Vec<String> {
+pub fn get_link_list(document: &Html, base_url: &str) -> Vec<String> {
     let a_tag_selector = Selector::parse("a").unwrap();
     let mut link_list = Vec::new();
 
@@ -82,7 +87,6 @@ pub fn get_link_list(document: &Html,base_url: &str) -> Vec<String> {
 
         let abs_url_handle = base.join(href);
 
-
         if let Ok(mut abs_url) = abs_url_handle {
             abs_url.set_query(None);
             abs_url.set_fragment(None);
@@ -93,7 +97,6 @@ pub fn get_link_list(document: &Html,base_url: &str) -> Vec<String> {
 
     return link_list;
 }
-
 
 pub fn arrange_count(words: Vec<String>) -> HashMap<String, i32> {
     let mut word_freq_count: HashMap<String, i32> = HashMap::new();
