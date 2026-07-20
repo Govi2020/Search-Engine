@@ -3,7 +3,6 @@ mod parser;
 mod robots;
 mod sitemap;
 
-use common::constants;
 use common::utils;
 use database_helper::database;
 use database_helper::schema::Entry;
@@ -18,8 +17,9 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::sync::Arc;
 use url::Url;
+use tokio::sync::Semaphore;
 
-#[tokio::main (flavor = "multi_thread")]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let (entries, sites) = database::initialize_mongodb().await;
 
@@ -27,12 +27,13 @@ async fn main() {
     let sites = Arc::new(sites);
     let visited_urls: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
     let queue: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
+    let semaphore = Arc::new(Semaphore::new(60));
 
     let robots_list: Arc<DashMap<String, RobotsWrapper>> = Arc::new(DashMap::new());
 
-    let path = std::env::current_dir().unwrap();
+    // let path = std::env::current_dir().unwrap();
 
-    println!("Running from: {}", path.display());
+    // println!("Running from: {}", path.display());
 
     // Seed Url File
     let seed_file = File::open("seed.txt").unwrap();
@@ -49,11 +50,13 @@ async fn main() {
             Some(result) => result.unwrap(),
             None => break,
         };
+        println!("{:?}",url);
 
         let entries = Arc::clone(&entries);
         let sites = Arc::clone(&sites);
         let visited_urls = Arc::clone(&visited_urls);
         let queue = Arc::clone(&queue);
+        let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
         let client = Arc::clone(&client);
 
@@ -64,6 +67,7 @@ async fn main() {
                 sites,
                 visited_urls,
                 queue,
+                semaphore,
                 robots_list,
                 client,
             )
@@ -81,7 +85,7 @@ struct QueueGuard {
     key: String,
 }
 
-impl Drop for QueueGuard{
+impl Drop for QueueGuard {
     fn drop(&mut self) {
         self.queue.remove(&self.key);
     }
@@ -93,21 +97,25 @@ async fn crawl_page(
     entries: Arc<Collection<Entry>>,
     sites: Arc<Collection<Site>>,
     visited_urls: Arc<DashMap<String, bool>>,
-    queue: Arc<DashMap<String,bool>>,
+    queue: Arc<DashMap<String, bool>>,
+    semaphore: Arc<Semaphore>,
     robots_list: Arc<DashMap<String, RobotsWrapper>>,
     client: Arc<Client>,
 ) {
+
 
     if queue.contains_key(&url) {
         return;
     }
 
+
+
+
     // Using Queue Guard to make sure to remove the queue after return or error
     let _queue_guard = QueueGuard {
         queue: queue.clone(),
-        key: url.clone()
+        key: url.clone(),
     };
-
 
 
     // Checking for Duplicate Scraping
@@ -117,13 +125,16 @@ async fn crawl_page(
         return;
     }
 
-
-
     if database::does_site_exists(&sites, &url).await {
         println!("Duplicate Key {:?} in DataBase", url);
         queue.remove(&url);
         return;
     }
+
+
+    // Using the Permit to limit concorrent requests
+    let permit = semaphore.acquire().await.unwrap();
+
 
     // Add to the Queue
 
@@ -152,7 +163,10 @@ async fn crawl_page(
             return;
         }
 
-        site_map_urls = robots.sitemap.clone();
+        // For i need to use the site_map once
+        // TODO : Calculate the performance cost for this and decide
+        // site_map_urls = robots.sitemap.clone();
+        site_map_urls = Vec::new();
 
         robots_list.insert(origin, robots);
 
@@ -168,6 +182,7 @@ async fn crawl_page(
         let visited_urls = Arc::clone(&visited_urls);
         let queue = Arc::clone(&queue);
         let client = Arc::clone(&client);
+        let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
         let url = url.to_string();
         // If i want i can check in the Queue and visited before making the task
@@ -175,28 +190,37 @@ async fn crawl_page(
 
 
         if queue.contains_key(&url) {
-            return;
+            continue;
         }
 
         if visited_urls.contains_key(&url) {
             queue.remove(&url);
-            return;
+            continue;
         }
 
 
         sitemap_tasks.push(tokio::spawn(async move {
-            crawl_page(url, entries, sites, visited_urls,queue, robots_list, client).await
+            crawl_page(
+                url,
+                entries,
+                sites,
+                visited_urls,
+                queue,
+                semaphore,
+                robots_list,
+                client,
+            )
+            .await
         }));
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
-
-    println!("Scraping URL : {}", url);
+    // println!("Scraping URL : {}", url);
 
     let html = match fetcher::get_html_from_url(&url, &client).await {
         Ok(html) => html,
         Err(e) => {
-            println!("Error fetching {}: {:?}", url, e);
+            println!("Error fetching {}: {:?}", url, e.status());
             return;
         }
     };
@@ -206,6 +230,12 @@ async fn crawl_page(
     }
 
     let (meta_data, link_list, word_scores) = process_html(&html, &url);
+    println!(
+        "[{:?}] Fetched URL : {} ",
+        meta_data.get("title").unwrap(),
+        url
+    );
+
     let site_id = database::create_site((*sites).clone(), &url, meta_data, link_list.clone()).await;
 
     for (word, count, importance) in &word_scores {
@@ -216,7 +246,8 @@ async fn crawl_page(
 
     let mut tasks: Vec<_> = Vec::new();
 
-    println!("The Link List is {:#?}", link_list);
+
+    drop(permit);
 
     for url in link_list {
         let entries = Arc::clone(&entries);
@@ -224,11 +255,22 @@ async fn crawl_page(
         let visited_urls = Arc::clone(&visited_urls);
         let queue = Arc::clone(&queue);
         let client = Arc::clone(&client);
+        let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
         let url = url.to_string();
 
         tasks.push(tokio::spawn(async move {
-            crawl_page(url, entries, sites, visited_urls,queue, robots_list, client).await
+            crawl_page(
+                url,
+                entries,
+                sites,
+                visited_urls,
+                queue,
+                semaphore,
+                robots_list,
+                client,
+            )
+            .await
         }));
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }

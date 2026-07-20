@@ -24,11 +24,6 @@ impl RobotsWrapper {
 
         robots.is_allowed("GBot", path)
     }
-
-    pub fn get_sitemap_urls(&self) -> Vec<&str> {
-        let robots = RobotsTxt::parse(&self.content);
-        return robots.extensions.sitemaps;
-    }
 }
 
 pub async fn get_robots(url: &str, client: &Arc<Client>) -> RobotsWrapper {

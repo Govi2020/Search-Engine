@@ -19,28 +19,24 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>) {
     let sites: Collection<Site> = db.collection("sites");
 
     // Init Indexes
-    create_indexes(&entries).await;
+    create_indexes(&entries, "text").await;
+    create_indexes(&sites, "url").await;
 
     (entries, sites)
 }
 
-
-async fn create_indexes(collection: &Collection<Entry>) {
+async fn create_indexes<T>(collection: &Collection<T>, field: &str)
+where
+    T: Send + Sync,
+{
     let index = IndexModel::builder()
         .keys(doc! {
-            "text": 1
+            field: 1
         })
-        .options(
-            IndexOptions::builder()
-                .unique(true)
-                .build()
-        )
+        .options(IndexOptions::builder().unique(true).build())
         .build();
 
-    collection
-        .create_index(index)
-        .await
-        .unwrap();
+    collection.create_index(index).await.unwrap();
 }
 
 pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Entry {
