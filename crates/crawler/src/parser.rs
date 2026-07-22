@@ -1,15 +1,15 @@
 use scraper::{ElementRef, Html, Node, Selector};
-use url::Url;
 use std::collections::HashMap;
+use url::Url;
 
 pub fn get_html_parser(html: &str) -> Html {
     Html::parse_document(html)
 }
 
-pub fn is_valid_url(url_info : &Url) -> bool {
-    if (url_info.cannot_be_a_base() || url_info.scheme() != "http" || url_info.scheme() != "https") {
-            return false;
-    }
+pub fn is_valid_url(url_info: &Url) -> bool {
+    // if url_info.cannot_be_a_base() || url_info.scheme() != "http" || url_info.scheme() != "https" {
+    //     return false;
+    // }
 
     let url_path = url_info.path();
 

@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::sync::Arc;
-use url::Url;
 use tokio::sync::Semaphore;
+use url::Url;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -50,7 +50,6 @@ async fn main() {
             Some(result) => result.unwrap(),
             None => break,
         };
-        println!("{:?}",url);
 
         let entries = Arc::clone(&entries);
         let sites = Arc::clone(&sites);
@@ -102,7 +101,6 @@ async fn crawl_page(
     robots_list: Arc<DashMap<String, RobotsWrapper>>,
     client: Arc<Client>,
 ) {
-
     if queue.contains_key(&url) {
         return;
     }
@@ -110,6 +108,7 @@ async fn crawl_page(
     let url_info = Url::parse(&url).unwrap();
     let origin = url_info.origin().ascii_serialization();
 
+    println!("{:?}", url);
 
     if !parser::is_valid_url(&url_info) {
         return;
@@ -118,13 +117,11 @@ async fn crawl_page(
     // Add to the Queue
     queue.insert(url.clone(), true);
 
-
     // Using Queue Guard to make sure to remove the queue after return or error
     let _queue_guard = QueueGuard {
         queue: queue.clone(),
         key: url.clone(),
     };
-
 
     // Checking for Duplicate Scraping
     if visited_urls.contains_key(&url) {
@@ -137,12 +134,8 @@ async fn crawl_page(
         return;
     }
 
-
     // Using the Permit to limit concorrent requests
     let permit = semaphore.acquire().await.unwrap();
-
-
-
 
     // Checking The Robots.txt
 
@@ -156,7 +149,6 @@ async fn crawl_page(
         }
 
         site_map_urls = robots.sitemap.clone();
-
     } else {
         let robots: RobotsWrapper = robots::get_robots(&url, &client).await;
 
@@ -170,9 +162,7 @@ async fn crawl_page(
         site_map_urls = Vec::new();
 
         robots_list.insert(origin, robots);
-
     }
-
 
     let mut sitemap_tasks: Vec<_> = Vec::new();
 
@@ -189,7 +179,6 @@ async fn crawl_page(
         // If i want i can check in the Queue and visited before making the task
         // TODO : For now i just put it here
 
-
         if queue.contains_key(&url) {
             continue;
         }
@@ -198,7 +187,6 @@ async fn crawl_page(
             queue.remove(&url);
             continue;
         }
-
 
         sitemap_tasks.push(tokio::spawn(async move {
             crawl_page(
@@ -229,23 +217,30 @@ async fn crawl_page(
         return;
     }
 
-    let (meta_data, link_list,total_no_of_words, word_scores) = process_html(&html, &url);
+    let (meta_data, link_list, total_no_of_words, word_scores) = process_html(&html, &url);
     println!(
         "[{:?}] Fetched URL : {} ",
-        meta_data.get("title").unwrap(),
+        meta_data.get("title").unwrap_or(&" ".to_string()),
         url
     );
 
     let site_id = database::create_site((*sites).clone(), &url, meta_data, link_list.clone()).await;
 
     for (word, count, importance) in &word_scores {
-        database::create_entry(&entries, word, *count,total_no_of_words, *importance, &site_id).await;
+        database::create_entry(
+            &entries,
+            word,
+            *count,
+            total_no_of_words,
+            *importance,
+            &site_id,
+        )
+        .await;
     }
 
     visited_urls.insert(url.clone(), true);
 
     let mut tasks: Vec<_> = Vec::new();
-
 
     drop(permit);
 
@@ -301,10 +296,13 @@ fn process_html(
 
     let clean_text: String = utils::remove_unneeded_words(&html_text_content);
 
-    let word_tokens : Vec<String> = utils::tokonize(&clean_text);
+    let language = utils::find_language(&clean_text);
+
+    let word_tokens: Vec<String> = utils::tokonize(&clean_text, language);
+
+    println!("{:?}", word_tokens);
 
     let total_no_of_words: usize = word_tokens.len();
-
 
     let word_freq_count: HashMap<String, i32> = parser::arrange_count(word_tokens.clone());
 
@@ -317,5 +315,5 @@ fn process_html(
         })
         .collect();
 
-    return (meta_data, link_list,total_no_of_words, word_scores);
+    return (meta_data, link_list, total_no_of_words, word_scores);
 }

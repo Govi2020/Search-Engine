@@ -35,7 +35,10 @@ pub async fn get_search_result(
 
     let query = query_params.query.clone();
     let query_filtered = utils::remove_unneeded_words(&query);
-    let query_array: Vec<String> = utils::tokonize(&query_filtered);
+
+    let language = utils::find_language(&query);
+
+    let query_array: Vec<String> = utils::tokonize(&query_filtered, language);
 
     println!("HI");
 

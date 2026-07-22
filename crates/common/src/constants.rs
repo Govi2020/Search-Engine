@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use waken_snowball::Algorithm;
+use whichlang::Lang;
 
 pub const CUSTOM_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -15,14 +17,10 @@ pub const CUSTOM_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) A
 // pub const META_SELECTOR: &str = "meta";
 
 pub const SKIP_EXTENSIONS: &[&str] = &[
-    "pdf", "jpg", "jpeg", "png", "gif", "svg", "webp",
-    "mp3", "wav", "mp4", "avi", "mkv", "mov",
-    "zip", "rar", "7z", "tar", "gz",
-    "exe", "msi", "apk", "deb", "rpm",
-    "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-    "ttf", "woff", "woff2", "ico",
+    "pdf", "jpg", "jpeg", "png", "gif", "svg", "webp", "mp3", "wav", "mp4", "avi", "mkv", "mov",
+    "zip", "rar", "7z", "tar", "gz", "exe", "msi", "apk", "deb", "rpm", "doc", "docx", "xls",
+    "xlsx", "ppt", "pptx", "ttf", "woff", "woff2", "ico",
 ];
-
 
 pub fn get_stop_words() -> HashSet<&'static str> {
     let mut stop_words = HashSet::new();
@@ -43,4 +41,29 @@ pub fn get_stop_words() -> HashSet<&'static str> {
         stop_words.insert(word);
     }
     stop_words
+}
+
+pub fn language_to_algorithm(lang: Lang) -> Option<Algorithm> {
+    match lang {
+        Lang::Eng => Some(Algorithm::English),
+
+        Lang::Fra => Some(Algorithm::French),
+
+        Lang::Deu => Some(Algorithm::German),
+
+        Lang::Spa => Some(Algorithm::Spanish),
+
+        Lang::Ita => Some(Algorithm::Italian),
+
+        Lang::Nld => Some(Algorithm::Dutch),
+
+        Lang::Por => Some(Algorithm::Portuguese),
+
+        Lang::Rus => Some(Algorithm::Russian),
+
+        Lang::Swe => Some(Algorithm::Swedish),
+        Lang::Tur => Some(Algorithm::Turkish),
+
+        _ => None,
+    }
 }

@@ -15,7 +15,7 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>) {
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
     // Init Database and Collection
-    let db = client.database("SearchEngine2");
+    let db = client.database("SearchEngine3");
     let entries: Collection<Entry> = db.collection("entries");
     let sites: Collection<Site> = db.collection("sites");
 
@@ -125,6 +125,7 @@ pub async fn create_site(
             "title": &site.title,
             "description": &site.description,
             "links": &site.links,
+            "page_rank": &site.page_rank
         }
     };
 
