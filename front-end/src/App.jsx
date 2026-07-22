@@ -51,6 +51,18 @@ function App() {
     <div className={`app-shell ${isSearching ? 'results-open' : ''}`}>
       <main className="main-stage">
         <section className={`hero-panel ${isSearching ? 'hero-panel-compact' : ''}`}>
+          {!isSearching && (
+            <motion.div
+              className="landing-brand"
+              initial={false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+            >
+              <div className="brand-badge">G</div>
+              <span>Googol</span>
+            </motion.div>
+          )}
+
           <motion.form
             className={`search-form ${isSearching ? 'search-form-compact' : ''}`}
             onSubmit={handleSubmit}

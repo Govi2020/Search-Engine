@@ -27,7 +27,7 @@ async fn main() {
     let sites = Arc::new(sites);
     let visited_urls: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
     let queue: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
-    let semaphore = Arc::new(Semaphore::new(65));
+    let semaphore = Arc::new(Semaphore::new(85));
 
     let robots_list: Arc<DashMap<String, RobotsWrapper>> = Arc::new(DashMap::new());
 

@@ -60,7 +60,7 @@ pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Entry {
     entries.find_one(filter).await.unwrap().unwrap()
 }
 
-pub async fn get_site(sites: Collection<Site>, site_id: &str) -> Site {
+pub async fn get_site(sites: Collection<Site>, site_id: String) -> Site {
     let site_id = ObjectId::parse_str(site_id).unwrap();
 
     let filter = doc! {

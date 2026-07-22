@@ -1,7 +1,7 @@
 use futures::future;
 use serde::Deserialize;
-use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::{cmp::Ordering, hash::Hash};
 
 use database_helper::{
     database,
@@ -42,8 +42,6 @@ pub async fn get_search_result(
 
     println!("HI");
 
-    let query_entry_list: Vec<Entry> = Vec::new();
-
     let mut site_rarity_mapping: HashMap<String, Vec<f64>> = HashMap::new();
     let mut site_word_info_mapping: HashMap<String, Vec<WordInfo>> = HashMap::new();
 
@@ -52,10 +50,14 @@ pub async fn get_search_result(
         .map(|word| database::get_entry(entries.clone(), word));
 
     let query_entry_list = futures::future::join_all(futures).await;
+    let mut temp_hash_map: HashMap<String, ()> = HashMap::new();
 
     for query_entry in query_entry_list {
+        let current_size = query_entry.map.len().try_into().unwrap();
         for (key, value) in &(query_entry.map) {
             let key = key.to_string();
+
+            temp_hash_map.entry(key.clone()).or_insert(());
 
             site_word_info_mapping
                 .entry(key.clone())
@@ -65,11 +67,30 @@ pub async fn get_search_result(
             site_rarity_mapping
                 .entry(key.clone())
                 .or_default()
-                .push(calculate_rarity_of_word(
-                    query_entry.map.len().try_into().unwrap(),
-                    total_entry_count,
-                ));
+                .push(calculate_rarity_of_word(current_size, total_entry_count));
         }
+    }
+
+    let mut tasks = Vec::new();
+
+    for (site_id, _) in temp_hash_map {
+        let sites = sites.clone();
+
+        tasks.push(async move {
+            let site = database::get_site(sites, site_id).await;
+
+            let id = site.id.unwrap().to_string();
+
+            (id, site)
+        });
+    }
+
+    let results = future::join_all(tasks).await;
+
+    let mut site_hash_map = HashMap::new();
+
+    for (id, site) in results {
+        site_hash_map.insert(id, site);
     }
 
     let mut largest_len = 0;
@@ -93,12 +114,15 @@ pub async fn get_search_result(
             let mut score_sheet: HashMap<String, f64> = HashMap::new();
 
             for site_id in site_vector {
+                println!("rarity mapping {:#?}", site_rarity_mapping);
                 let score = calculate_score(
                     site_word_info_mapping.get(site_id).unwrap(),
                     site_rarity_mapping.get(site_id).unwrap(),
+                    site_hash_map.get(site_id).unwrap().page_rank,
                 );
                 score_sheet.insert(site_id.to_string(), score);
             }
+            println!("score_sheet is {:#?}", score_sheet);
 
             let mut sorted: Vec<_> = score_sheet.iter().collect();
 
@@ -116,14 +140,18 @@ pub async fn get_search_result(
 
     let futures = final_vector
         .iter()
-        .map(|id| database::get_site(sites.clone(), id));
+        .map(|id| site_hash_map.get(id).unwrap().clone());
 
-    let result = future::join_all(futures).await;
+    let result = futures.collect::<Vec<Site>>();
 
     return Json(result);
 }
 
-fn calculate_score(all_word_info: &Vec<WordInfo>, rarity_list: &Vec<f64>) -> f64 {
+fn calculate_score(
+    all_word_info: &Vec<WordInfo>,
+    rarity_list: &Vec<f64>,
+    mut page_rank: f64,
+) -> f64 {
     let mut score: f64 = 0.0;
 
     for (index, word_info) in all_word_info.iter().enumerate() {
@@ -137,9 +165,18 @@ fn calculate_score(all_word_info: &Vec<WordInfo>, rarity_list: &Vec<f64>) -> f64
         let itf = (word_info).term_frequency * 200.0;
         let importance = ((word_info).importance as f64 / 10.0) + 1.0;
         let idf = rarity_list.get(index).unwrap();
+        if page_rank == 0.0 {
+            page_rank = 0.01;
+        }
 
-        score += itf * importance * idf;
+        // println!("Page rank {:?}", page_rank);
+        // println!("importance rank {:?}", importance);
+        // println!("idf rank {:?}", idf);
+
+        score += itf * importance * idf * page_rank;
     }
+
+    println!("score rank {:?}", score);
 
     return score;
 }
