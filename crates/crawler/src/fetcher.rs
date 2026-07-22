@@ -1,8 +1,19 @@
 use common::constants::CUSTOM_USER_AGENT;
 use reqwest::{header::CONTENT_TYPE, header::USER_AGENT, Client};
+use url::Url;
 use std::sync::Arc;
 
 pub async fn get_html_from_url(url: &str, client: &Arc<Client>) -> Result<String, reqwest::Error> {
+
+    let url_info = Url::parse(url).unwrap();
+
+    if (url_info.cannot_be_a_base() || url_info.scheme() != "http" || url_info.scheme() != "https") {
+            return Ok("".to_string());
+    }
+
+
+
+
     let response = client
         .get(url)
         .header(USER_AGENT, CUSTOM_USER_AGENT)

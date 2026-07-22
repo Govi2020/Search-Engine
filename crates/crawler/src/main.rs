@@ -27,7 +27,7 @@ async fn main() {
     let sites = Arc::new(sites);
     let visited_urls: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
     let queue: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
-    let semaphore = Arc::new(Semaphore::new(60));
+    let semaphore = Arc::new(Semaphore::new(65));
 
     let robots_list: Arc<DashMap<String, RobotsWrapper>> = Arc::new(DashMap::new());
 
@@ -103,12 +103,20 @@ async fn crawl_page(
     client: Arc<Client>,
 ) {
 
-
     if queue.contains_key(&url) {
         return;
     }
 
+    let url_info = Url::parse(&url).unwrap();
+    let origin = url_info.origin().ascii_serialization();
 
+
+    if !parser::is_valid_url(&url_info) {
+        return;
+    }
+
+    // Add to the Queue
+    queue.insert(url.clone(), true);
 
 
     // Using Queue Guard to make sure to remove the queue after return or error
@@ -121,13 +129,11 @@ async fn crawl_page(
     // Checking for Duplicate Scraping
     if visited_urls.contains_key(&url) {
         println!("Duplicate Key {:?} in Cache", url);
-        queue.remove(&url);
         return;
     }
 
     if database::does_site_exists(&sites, &url).await {
         println!("Duplicate Key {:?} in DataBase", url);
-        queue.remove(&url);
         return;
     }
 
@@ -136,12 +142,7 @@ async fn crawl_page(
     let permit = semaphore.acquire().await.unwrap();
 
 
-    // Add to the Queue
 
-    queue.insert(url.clone(), true);
-
-
-    let origin = Url::parse(&url).unwrap().origin().ascii_serialization();
 
     // Checking The Robots.txt
 
@@ -212,7 +213,6 @@ async fn crawl_page(
             )
             .await
         }));
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
     // println!("Scraping URL : {}", url);
@@ -229,7 +229,7 @@ async fn crawl_page(
         return;
     }
 
-    let (meta_data, link_list, word_scores) = process_html(&html, &url);
+    let (meta_data, link_list,total_no_of_words, word_scores) = process_html(&html, &url);
     println!(
         "[{:?}] Fetched URL : {} ",
         meta_data.get("title").unwrap(),
@@ -239,7 +239,7 @@ async fn crawl_page(
     let site_id = database::create_site((*sites).clone(), &url, meta_data, link_list.clone()).await;
 
     for (word, count, importance) in &word_scores {
-        database::create_entry(&entries, word, *count, *importance, &site_id).await;
+        database::create_entry(&entries, word, *count,total_no_of_words, *importance, &site_id).await;
     }
 
     visited_urls.insert(url.clone(), true);
@@ -272,7 +272,6 @@ async fn crawl_page(
             )
             .await
         }));
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
     for task in sitemap_tasks {
@@ -290,7 +289,8 @@ fn process_html(
 ) -> (
     HashMap<String, String>,
     Vec<String>,
-    Vec<(String, i32, i32)>,
+    usize,
+    Vec<(String, usize, i32)>,
 ) {
     let document = parser::get_html_parser(html);
 
@@ -301,17 +301,21 @@ fn process_html(
 
     let clean_text: String = utils::remove_unneeded_words(&html_text_content);
 
-    let word_tokens = utils::tokonize(&clean_text);
+    let word_tokens : Vec<String> = utils::tokonize(&clean_text);
+
+    let total_no_of_words: usize = word_tokens.len();
+
+
     let word_freq_count: HashMap<String, i32> = parser::arrange_count(word_tokens.clone());
 
-    let word_scores: Vec<(String, i32, i32)> = word_tokens
+    let word_scores: Vec<(String, usize, i32)> = word_tokens
         .iter()
         .map(|word| {
             let count = word_freq_count.get(word).copied().unwrap_or(0);
             let importance = parser::calculate_importance(&document, word);
-            (word.clone(), count, importance)
+            (word.clone(), count as usize, importance)
         })
         .collect();
 
-    return (meta_data, link_list, word_scores);
+    return (meta_data, link_list,total_no_of_words, word_scores);
 }

@@ -16,3 +16,13 @@ https://opensource.google
 https://www.quora.com
 https://slashdot.org
 https://www.producthunt.com
+https://en.wikipedia.org/wiki/Computer_science
+https://en.wikipedia.org/wiki/World_War_II
+https://en.wikipedia.org/wiki/Biology
+https://en.wikipedia.org/wiki/Mathematics
+https://en.wikipedia.org/wiki/Physics
+https://en.wikipedia.org/wiki/Artificial_intelligence
+https://en.wikipedia.org/wiki/Earth
+https://en.wikipedia.org/wiki/History
+https://en.wikipedia.org/wiki/Philosophy
+https://en.wikipedia.org/wiki/Technology

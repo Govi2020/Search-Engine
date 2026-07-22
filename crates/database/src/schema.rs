@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub struct WordInfo {
     pub count: i32,
     pub importance: i32,
+    pub term_frequency: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +30,7 @@ pub struct Site {
     pub title: String,
     pub description: String,
     pub links: Vec<String>,
+    pub page_rank: f64,
     #[serde(rename = "_id")]
     pub id: Option<ObjectId>,
 }

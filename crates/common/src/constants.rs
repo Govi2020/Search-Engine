@@ -14,6 +14,14 @@ pub const CUSTOM_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) A
 // pub const A_SELECTOR: &str = "a";
 // pub const META_SELECTOR: &str = "meta";
 
+pub const SKIP_EXTENSIONS: &[&str] = &[
+    "pdf", "jpg", "jpeg", "png", "gif", "svg", "webp",
+    "mp3", "wav", "mp4", "avi", "mkv", "mov",
+    "zip", "rar", "7z", "tar", "gz",
+    "exe", "msi", "apk", "deb", "rpm",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "ttf", "woff", "woff2", "ico",
+];
 
 
 pub fn get_stop_words() -> HashSet<&'static str> {

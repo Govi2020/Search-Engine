@@ -1,0 +1,10 @@
+[package]
+name = "ranker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pagerank_rs = "0.1.0"
+database_helper={path="../database/"}
+futures = "0.3.33"
+tokio = "1.53.1"
