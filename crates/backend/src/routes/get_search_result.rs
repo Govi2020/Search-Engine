@@ -1,3 +1,4 @@
+use axum::http::{HeaderMap, StatusCode};
 use futures::future;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -8,11 +9,13 @@ use database_helper::{
     schema::{Entry, Site, WordInfo},
 };
 
+use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     Json,
 };
 use common::utils;
+use std::time::Instant;
 
 use crate::AppState;
 
@@ -24,7 +27,7 @@ pub struct SearchQueryParams {
 pub async fn get_search_result(
     query_params: Query<SearchQueryParams>,
     State(state): State<AppState>,
-) -> Json<Vec<Site>> {
+) -> impl IntoResponse {
     // Remove ",","." etc
     // remove "this", "is" etc
     //
@@ -40,10 +43,10 @@ pub async fn get_search_result(
 
     let query_array: Vec<String> = utils::tokonize(&query_filtered, language);
 
-    println!("HI");
-
     let mut site_rarity_mapping: HashMap<String, Vec<f64>> = HashMap::new();
     let mut site_word_info_mapping: HashMap<String, Vec<WordInfo>> = HashMap::new();
+
+    let start = Instant::now();
 
     let futures = query_array
         .iter()
@@ -114,7 +117,6 @@ pub async fn get_search_result(
             let mut score_sheet: HashMap<String, f64> = HashMap::new();
 
             for site_id in site_vector {
-                println!("rarity mapping {:#?}", site_rarity_mapping);
                 let score = calculate_score(
                     site_word_info_mapping.get(site_id).unwrap(),
                     site_rarity_mapping.get(site_id).unwrap(),
@@ -122,7 +124,6 @@ pub async fn get_search_result(
                 );
                 score_sheet.insert(site_id.to_string(), score);
             }
-            println!("score_sheet is {:#?}", score_sheet);
 
             let mut sorted: Vec<_> = score_sheet.iter().collect();
 
@@ -143,8 +144,16 @@ pub async fn get_search_result(
         .map(|id| site_hash_map.get(id).unwrap().clone());
 
     let result = futures.collect::<Vec<Site>>();
+    let duration = start.elapsed();
 
-    return Json(result);
+    let mut headers = HeaderMap::new();
+
+    headers.insert(
+        "x-search-time-ms",
+        duration.subsec_millis().to_string().parse().unwrap(),
+    );
+
+    return (StatusCode::OK, headers, Json(result));
 }
 
 fn calculate_score(
@@ -172,11 +181,12 @@ fn calculate_score(
         // println!("Page rank {:?}", page_rank);
         // println!("importance rank {:?}", importance);
         // println!("idf rank {:?}", idf);
+        // println!("itf rank {:?}", itf);
 
-        score += itf * importance * idf * page_rank;
+        score += itf * importance * page_rank;
     }
 
-    println!("score rank {:?}", score);
+    // println!("score rank {:?}", score);
 
     return score;
 }

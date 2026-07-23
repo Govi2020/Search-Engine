@@ -76,6 +76,7 @@ pub fn get_meta_data(document: &Html) -> HashMap<String, String> {
     }
 
     let meta_selector = Selector::parse("meta").unwrap();
+    let link_selector = Selector::parse("link").unwrap();
 
     for meta_element in document.select(&meta_selector) {
         let name = meta_element.value().attr("name").unwrap_or("");
@@ -83,6 +84,15 @@ pub fn get_meta_data(document: &Html) -> HashMap<String, String> {
 
         if !name.is_empty() && !content.is_empty() {
             meta_data.insert(name.to_string(), content.to_string());
+        }
+    }
+
+    for link_element in document.select(&link_selector) {
+        let rel = link_element.value().attr("rel").unwrap_or("");
+        let href = link_element.value().attr("href").unwrap_or("");
+
+        if rel == "icon" {
+            meta_data.insert("icon".to_string(), href.to_string());
         }
     }
 

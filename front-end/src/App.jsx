@@ -4,12 +4,25 @@ import './App.css'
 
 const suggestions = ['design systems', 'semantic search', 'AI agents', 'product analytics']
 
+function ResultFavicon({ src, alt, fallbackText }) {
+  const [hasError, setHasError] = useState(false)
+
+  if (!src || hasError) {
+    return <div className="result-favicon-fallback">{fallbackText}</div>
+  }
+
+  return <img className="result-favicon" src={src} alt={alt} onError={() => setHasError(true)} />
+}
+
 function App() {
   const [query, setQuery] = useState('design systems')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [visibleResults, setVisibleResults] = useState([])
+  const [copiedUrl, setCopiedUrl] = useState('')
+  const [openMenuUrl, setOpenMenuUrl] = useState('')
+  const [searchTime, setSearchTime] = useState('')
 
   const startSearch = async (nextQuery) => {
     const normalized = nextQuery.trim() || 'design systems'
@@ -21,6 +34,8 @@ function App() {
     try {
       const response = await fetch(`http://localhost:3000/?query=${encodeURIComponent(normalized)}`)
       const data = await response.json()
+      const timingHeader = response.headers.get('x-search-time-ms') || response.headers.get('X-Search-Time-MS') || ''
+      setSearchTime(timingHeader)
       setVisibleResults(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Search request failed:', error)
@@ -45,6 +60,32 @@ function App() {
     const trimmed = value.trim()
     if (/^https?:\/\//i.test(trimmed)) return trimmed
     return `https://${trimmed}`
+  }
+
+  const getFaviconSource = (item) => item?.favicon || item?.faviconUrl || item?.icon || ''
+
+  const getFallbackText = (value) => {
+    if (!value) return 'W'
+    const cleaned = value.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+    const first = cleaned.split(/[./-]/).find(Boolean)
+    return (first || 'W').slice(0, 1).toUpperCase()
+  }
+
+  const copyLink = async (url) => {
+    if (!url) return
+
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedUrl(url)
+      setOpenMenuUrl('')
+      window.setTimeout(() => setCopiedUrl(''), 1400)
+    } catch (error) {
+      console.error('Unable to copy link:', error)
+    }
+  }
+
+  const toggleResultMenu = (url) => {
+    setOpenMenuUrl((current) => (current === url ? '' : url))
   }
 
   return (
@@ -83,7 +124,7 @@ function App() {
                 animate={isSearching ? { opacity: 1, width: 36, marginRight: 8, scale: 1 } : { opacity: 0, width: 0, marginRight: 0, scale: 0.9 }}
                 transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
               >
-                <div className="brand-badge">N</div>
+                <div className="brand-badge">G</div>
               </motion.div>
               <span className="search-icon">⌕</span>
               <input
@@ -122,7 +163,10 @@ function App() {
           <section className="results-panel">
             <div className="results-header">
               <span className="results-label">Results</span>
-              <span className="results-count">{isLoading ? 'Loading…' : `${visibleResults.length} results`}</span>
+              <span className="results-count">
+                {isLoading ? 'Loading…' : `${visibleResults.length} results`}
+                {searchTime ? ` • in ${searchTime} ms` : ''}
+              </span>
             </div>
 
             <div className="results-list">
@@ -135,17 +179,61 @@ function App() {
                   </div>
                 ))
               ) : (
-                visibleResults.map((item) => (
-                  <article className="result-item" key={`${item.title}-${item.url}`}>
-                    <a className="result-url" href={getResultHref(item.url)} target="_blank" rel="noreferrer">
-                      {getDisplayUrl(item.url)}
-                    </a>
-                    <a className="result-title-link" href={getResultHref(item.url)} target="_blank" rel="noreferrer">
-                      {item.title}
-                    </a>
-                    <p className="result-description">{item.description}</p>
-                  </article>
-                ))
+                visibleResults.map((item) => {
+                  const itemHref = getResultHref(item.url)
+
+                  return (
+                    <article className="result-item" key={`${item.title}-${item.url}`}>
+                      <div className="result-favicon-wrap">
+                        <ResultFavicon
+                          src={getFaviconSource(item)}
+                          alt={`${item.title} favicon`}
+                          fallbackText={getFallbackText(item.url)}
+                        />
+                      </div>
+
+                      <div className="result-content">
+                        <a className="result-url" href={itemHref} target="_blank" rel="noreferrer">
+                          {getDisplayUrl(item.url)}
+                        </a>
+                        <a className="result-title-link" href={itemHref} target="_blank" rel="noreferrer">
+                          {item.title}
+                        </a>
+                        <p className="result-description">{item.description}</p>
+                      </div>
+
+                      <div className="result-action-wrapper">
+                        <button
+                          className="result-action"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleResultMenu(itemHref)
+                          }}
+                          aria-label="Open result actions"
+                        >
+                          {copiedUrl === itemHref ? '✓' : '⋯'}
+                        </button>
+
+                        {openMenuUrl === itemHref && (
+                          <div className="result-action-menu" role="menu">
+                            <button
+                              className="result-action-menu-item"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                copyLink(itemHref)
+                              }}
+                              role="menuitem"
+                            >
+                              Copy link
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })
               )}
             </div>
           </section>

@@ -31,6 +31,7 @@ pub struct Site {
     pub description: String,
     pub links: Vec<String>,
     pub page_rank: f64,
+    pub favicon: String,
     #[serde(rename = "_id")]
     pub id: Option<ObjectId>,
 }

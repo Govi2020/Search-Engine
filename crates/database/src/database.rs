@@ -15,7 +15,7 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>) {
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
     // Init Database and Collection
-    let db = client.database("SearchEngine3");
+    let db = client.database("SearchEngine4");
     let entries: Collection<Entry> = db.collection("entries");
     let sites: Collection<Site> = db.collection("sites");
 
@@ -93,7 +93,7 @@ pub async fn update_page_rank(sites: Collection<Site>, site_id: String, page_ran
         .with_options(options)
         .await
     {
-        Ok(result) => {}
+        Ok(_result) => {}
         Err(e) => {
             println!("Error update Page Rank in site: {:?}", e);
         }
@@ -116,6 +116,7 @@ pub async fn create_site(
         links: link_list,
         id: None,
         page_rank: 0.0,
+        favicon: meta_data.get("icon").cloned().unwrap_or("".to_string()),
     };
 
     let filter = doc! { "url": url };
@@ -125,7 +126,8 @@ pub async fn create_site(
             "title": &site.title,
             "description": &site.description,
             "links": &site.links,
-            "page_rank": &site.page_rank
+            "page_rank": &site.page_rank,
+            "favicon": &site.favicon
         }
     };
 

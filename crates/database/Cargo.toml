@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bson = "3.1.0"
+dotenv = "0.15.0"
 futures = "0.3.33"
 mongodb = "3"
 serde = { version = "1", features = ["derive"] }
