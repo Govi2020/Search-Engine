@@ -17,7 +17,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::sync::Arc;
-use string_replace_all::string_replace_all;
 use tokio::sync::Semaphore;
 use url::Url;
 
@@ -221,7 +220,6 @@ async fn crawl_page(
         return;
     }
 
-    // Extracting All of the data
     let (meta_data, link_list, total_no_of_words, word_scores, images_list) =
         process_html(&html, &url);
 
@@ -232,9 +230,11 @@ async fn crawl_page(
     );
 
     let site_id = database::create_site((*sites).clone(), &url, meta_data, link_list.clone()).await;
-    if site_id == "" {
+    if (site_id == "") {
         return;
     }
+
+    let image_scores: HashMap<String, u32> = HashMap::new();
 
     let mut image_word_scores: HashMap<String, HashMap<String, u32>> = HashMap::new();
 
@@ -250,9 +250,8 @@ async fn crawl_page(
     // image at the same time so do it
 
     for (id, info) in new_image_list {
-        let file_name_formated = utils::format_file_name(info.0);
-
-        let total_text = file_name_formated + " " + info.1.as_str() + " " + info.2.as_str();
+        let total_text = info.0 + " " + info.1.as_str() + " " + info.2.as_str();
+        // let total_text  = (info.0.as_str() + " " info.1.as_str() + " " + info.2.as_str()).to_string();
 
         let language = utils::find_language(&total_text);
         let words = utils::tokonize(&total_text, language);
@@ -266,7 +265,7 @@ async fn crawl_page(
                 image_word_scores.insert(word, new);
             } else {
                 image_word_scores
-                    .get_mut(&word)
+                    .get(&word)
                     .unwrap()
                     .insert(id.clone(), count as u32);
             }
@@ -274,10 +273,7 @@ async fn crawl_page(
     }
 
     for (word, count, importance) in &word_scores {
-        let images_info: HashMap<String, u32> = image_word_scores
-            .get(word)
-            .unwrap_or(&HashMap::new())
-            .clone();
+        let images_info: HashMap<String,u32> = image_word_scores.get(word).unwrap_or(&HashMap::new()).clone();
 
         database::create_entry(
             &entries,
@@ -345,7 +341,7 @@ fn process_html(
 ) {
     let document = parser::get_html_parser(html);
 
-    let meta_data: HashMap<String, String> = parser::get_meta_data(&document, url);
+    let meta_data: HashMap<String, String> = parser::get_meta_data(&document);
     let link_list: Vec<String> = parser::get_link_list(&document, url);
 
     let images: HashMap<String, (String, String, String)> = parser::get_images(&document, url);

@@ -7,7 +7,7 @@ use std::future::Future;
 
 #[tokio::main]
 async fn main() {
-    let (_, sites) = database::initialize_mongodb().await;
+    let (_, sites, _) = database::initialize_mongodb().await;
 
     let all_pages = database::get_all_sites(sites.clone()).await.unwrap();
     let size = all_pages.len();

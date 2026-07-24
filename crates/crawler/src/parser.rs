@@ -1,3 +1,4 @@
+use common::utils;
 use scraper::{ElementRef, Html, Node, Selector};
 use std::collections::HashMap;
 use url::Url;
@@ -7,14 +8,10 @@ pub fn get_html_parser(html: &str) -> Html {
 }
 
 pub fn is_valid_url(url_info: &Url) -> bool {
-    // if url_info.cannot_be_a_base() || url_info.scheme() != "http" || url_info.scheme() != "https" {
-    //     return false;
-    // }
-
     let url_path = url_info.path();
 
     for ext in common::constants::SKIP_EXTENSIONS {
-        if (url_path.ends_with(ext)) {
+        if url_path.ends_with(ext) {
             return false;
         }
     }
@@ -57,6 +54,45 @@ fn get_child_text(element: ElementRef, output: &mut String) {
                         continue;
                     }
 
+                    if tag == "img" {
+                        let alt = child_element
+                            .value()
+                            .attr("alt")
+                            .unwrap_or_default()
+                            .to_string();
+                        let title = child_element
+                            .value()
+                            .attr("title")
+                            .unwrap_or_default()
+                            .to_string();
+                        let src = child_element
+                            .value()
+                            .attr("src")
+                            .unwrap_or_default()
+                            .to_string();
+
+                        let test_base_url = "https://test.com";
+                        let base = url::Url::parse(test_base_url).unwrap();
+
+                        let filename = base
+                            .join(&src)
+                            .unwrap()
+                            .path_segments()
+                            .unwrap()
+                            .last()
+                            .unwrap_or_default()
+                            .to_string();
+
+                        let clean_filename = utils::format_file_name(filename);
+
+                        output.push_str(alt.as_str());
+                        output.push(' ');
+                        output.push_str(title.as_str());
+                        output.push(' ');
+                        output.push_str(clean_filename.as_str());
+                        output.push(' ');
+                    }
+
                     get_child_text(child_element, output);
                 }
             }
@@ -66,7 +102,7 @@ fn get_child_text(element: ElementRef, output: &mut String) {
     }
 }
 
-pub fn get_meta_data(document: &Html) -> HashMap<String, String> {
+pub fn get_meta_data(document: &Html, url: &str) -> HashMap<String, String> {
     let mut meta_data = HashMap::new();
 
     let title_selector = Selector::parse("title").unwrap();
@@ -89,14 +125,61 @@ pub fn get_meta_data(document: &Html) -> HashMap<String, String> {
 
     for link_element in document.select(&link_selector) {
         let rel = link_element.value().attr("rel").unwrap_or("");
-        let href = link_element.value().attr("href").unwrap_or("");
+        let href = link_element.value().attr("href").unwrap_or("").to_string();
 
         if rel == "icon" {
-            meta_data.insert("icon".to_string(), href.to_string());
+            let base = Url::parse(
+                &Url::parse(url)
+                    .unwrap()
+                    .origin()
+                    .ascii_serialization()
+                    .to_string(),
+            )
+            .unwrap();
+
+            meta_data.insert("icon".to_string(), base.join(&href).unwrap().to_string());
         }
     }
 
     return meta_data;
+}
+
+pub fn get_images(document: &Html, base_url: &str) -> HashMap<String, (String, String, String)> {
+    let image_tag_selector = Selector::parse("img").unwrap();
+
+    let mut result: HashMap<String, (String, String, String)> = HashMap::new();
+
+    let base = url::Url::parse(base_url).unwrap();
+
+    for image in document.select(&image_tag_selector) {
+        let src = image.value().attr("src").unwrap_or("");
+        let alt = image.value().attr("alt").unwrap_or_default().to_string();
+        let title = image.value().attr("title").unwrap_or_default().to_string();
+
+        if src == "" {
+            continue;
+        }
+
+        let abs_url_handle = base.join(src);
+
+        if let Ok(mut abs_url) = abs_url_handle {
+            abs_url.set_query(None);
+            abs_url.set_fragment(None);
+
+            let filename = abs_url
+                .path_segments()
+                .unwrap()
+                .last()
+                .unwrap_or_default()
+                .to_string();
+
+            result
+                .entry(abs_url.to_string())
+                .or_insert((filename, alt, title));
+        }
+    }
+
+    result
 }
 
 pub fn get_link_list(document: &Html, base_url: &str) -> Vec<String> {

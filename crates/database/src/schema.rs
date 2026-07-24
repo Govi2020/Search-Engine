@@ -9,10 +9,12 @@ pub struct WordInfo {
     pub term_frequency: f64,
 }
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub text: String,
     pub map: HashMap<String, WordInfo>,
+    pub images: HashMap<String, u32>,
 }
 
 impl Default for Entry {
@@ -20,6 +22,7 @@ impl Default for Entry {
         Self {
             text: String::new(),
             map: HashMap::new(),
+            images: HashMap::new(),
         }
     }
 }
@@ -34,4 +37,16 @@ pub struct Site {
     pub favicon: String,
     #[serde(rename = "_id")]
     pub id: Option<ObjectId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Image {
+    #[serde(rename = "_id")]
+    pub id: Option<ObjectId>,
+
+    pub url: String,
+    pub site: String,
+    pub file_name: String,
+    pub alt: String,
+    pub title: String,
 }

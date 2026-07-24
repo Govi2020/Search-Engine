@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use regex::Regex;
+
 use crate::constants;
 use waken_snowball::{Algorithm, stem};
 
@@ -36,15 +39,28 @@ pub fn remove_unneeded_words(html_text: &str) -> String {
 }
 
 pub fn tokonize(html_text: &str, language: Algorithm) -> Vec<String> {
-    let language = Algorithm::English;
-    println!("---------------------------------");
-    println!("{:?}", get_stemmer_word("run", language));
-    println!("{:?}", get_stemmer_word("running", language));
-    println!("---------------------------------");
 
     return html_text
         .split_whitespace()
         .filter(|s| !s.is_empty())
         .map(|s| get_stemmer_word(s.to_lowercase().as_str(), language))
         .collect();
+}
+
+pub fn format_file_name(file_name: String) -> String {
+    let image_regex = Regex::new(
+        r"(?i)\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff|tif|avif|heic|heif)(?:\?.*)?$"
+    ).unwrap();
+
+    let symbols = Regex::new(r"[^a-zA-Z0-9\s]").unwrap();
+
+    symbols
+        .replace_all(
+            &image_regex.replace_all(&file_name, ""),
+            " "
+        )
+        .to_lowercase()
+        .trim()
+        .to_string()
+
 }

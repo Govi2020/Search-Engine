@@ -4,7 +4,6 @@ use std::sync::Arc;
 use url::Url;
 
 pub async fn get_html_from_url(url: &str, client: &Arc<Client>) -> Result<String, reqwest::Error> {
-    let url_info = Url::parse(url).unwrap();
 
     let response = client
         .get(url)
