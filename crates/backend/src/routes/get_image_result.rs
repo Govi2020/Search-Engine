@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use database_helper::{database, schema::Site};
+use database_helper::{database, schema::Site,schema::Entry};
 
 use axum::response::IntoResponse;
 use axum::{
@@ -51,9 +51,20 @@ pub async fn get_image_result(
 
     let start = Instant::now();
 
-    let futures = query_array
-        .iter()
-        .map(|word| database::get_entry(entries.clone(), word));
+
+    let futures = query_array.iter().map(async |word| {
+        let entry = database::get_entry(entries.clone(), word).await;
+
+        if entry.is_some() {
+            return entry.unwrap();
+        } else {
+            return Entry {
+                text: "".to_string(),
+                map: HashMap::new(),
+                images: HashMap::new(),
+            };
+        }
+    });
 
     let query_entry_list = futures::future::join_all(futures).await;
     let mut temp_hash_map: HashMap<String, ()> = HashMap::new();

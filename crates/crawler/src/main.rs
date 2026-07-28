@@ -17,13 +17,12 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::sync::Arc;
-use string_replace_all::string_replace_all;
 use tokio::sync::Semaphore;
 use url::Url;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-    let (entries, sites, images) = database::initialize_mongodb().await;
+    let (entries, sites, images,_) = database::initialize_mongodb().await;
 
     let entries = Arc::new(entries);
     let sites = Arc::new(sites);
@@ -95,6 +94,7 @@ impl Drop for QueueGuard {
     }
 }
 
+
 #[async_recursion::async_recursion]
 async fn crawl_page(
     url: String,
@@ -108,6 +108,10 @@ async fn crawl_page(
     client: Arc<Client>,
 ) {
     if queue.contains_key(&url) {
+        return;
+    }
+
+    if !(url == "https://opensource.google/") {
         return;
     }
 

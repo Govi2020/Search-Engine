@@ -34,9 +34,13 @@ pub async fn get_search_result(
 
     let entries = state.entries;
     let sites = state.sites;
+    let queries = state.queries;
     let total_entry_count = state.total_entry_count;
 
     let query = query_params.query.clone();
+
+    database::update_query(queries,&query).await;
+
     let query_filtered = utils::remove_unneeded_words(&query);
 
     let language = utils::find_language(&query);
@@ -48,11 +52,21 @@ pub async fn get_search_result(
 
     let start = Instant::now();
 
-    let futures = query_array
-        .iter()
-        .map(|word| database::get_entry(entries.clone(), word));
+    let futures = query_array.iter().map(async |word| {
+        let entry = database::get_entry(entries.clone(), word).await;
 
-    let query_entry_list = futures::future::join_all(futures).await;
+        if entry.is_some() {
+            return entry.unwrap();
+        } else {
+            return Entry {
+                text: "".to_string(),
+                map: HashMap::new(),
+                images: HashMap::new(),
+            };
+        }
+    });
+
+    let query_entry_list : Vec<Entry> = futures::future::join_all(futures).await;
     let mut temp_hash_map: HashMap<String, ()> = HashMap::new();
 
     for query_entry in query_entry_list {
@@ -183,7 +197,7 @@ fn calculate_score(
         // println!("idf rank {:?}", idf);
         // println!("itf rank {:?}", itf);
 
-        score += itf * importance * page_rank;
+        score += itf * importance * idf * page_rank;
     }
 
     // println!("score rank {:?}", score);

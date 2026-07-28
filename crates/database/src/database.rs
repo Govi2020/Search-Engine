@@ -1,41 +1,64 @@
-use crate::schema::{Entry, Image, Site};
+use crate::schema::{Entry, Image, Query, Site};
+use futures::StreamExt;
 use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{doc, Document};
+
+use regex;
 
 use futures::stream::TryStreamExt;
 use mongodb::options::{ClientOptions, FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
 use mongodb::{Client, Collection, IndexModel};
 use std::collections::HashMap;
 
-pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Collection<Image>) {
-    let client_options = ClientOptions::parse("mongodb://localhost:27017")
+use dotenv::dotenv;
+
+pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Collection<Image>,Collection<Query>) {
+    dotenv().ok();
+
+    let mongo_url = dotenv::var("MONGO_DB_URL").unwrap_or("mongodb://localhost:27017".to_string());
+    println!("URL IS {:?}", mongo_url);
+
+    let client_options = ClientOptions::parse(mongo_url)
         .await
         .expect("Failed to parse MongoDB connection string");
 
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
     // Init Database and Collection
-    let db = client.database("SearchEngine3");
+    let db = client.database("SearchEngine2");
     let entries: Collection<Entry> = db.collection("entries");
     let sites: Collection<Site> = db.collection("sites");
     let images: Collection<Image> = db.collection("images");
+    let queries: Collection<Query> = db.collection("queries");
 
     // Init Indexes
-    create_indexes(&entries, "text").await;
-    create_indexes(&sites, "url").await;
+    create_indexes(&entries, "text",true,1).await;
+    create_indexes(&sites, "url",true,1).await;
+    create_indexes(&images, "url",true,1).await;
+    create_indexes(&queries, "normalized",true,1).await;
 
-    (entries, sites, images)
+    create_indexes(&queries, "frequency", false, -1).await;
+        let index = IndexModel::builder()
+            .keys(doc! {
+                "normalized": 1,
+                "frequency": -1
+            })
+            .build();
+
+    queries.create_index(index).await;
+
+    (entries, sites, images,queries)
 }
 
-async fn create_indexes<T>(collection: &Collection<T>, field: &str)
+async fn create_indexes<T>(collection: &Collection<T>, field: &str,is_unique: bool,sort: i32)
 where
     T: Send + Sync,
 {
     let index = IndexModel::builder()
         .keys(doc! {
-            field: 1
+            field: sort
         })
-        .options(IndexOptions::builder().unique(true).build())
+        .options(IndexOptions::builder().unique(is_unique).build())
         .build();
 
     collection.create_index(index).await.unwrap();
@@ -53,13 +76,71 @@ pub async fn get_all_sites(sites: Collection<Site>) -> Result<Vec<Site>, mongodb
     return Ok(all_sites);
 }
 
-pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Entry {
+pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Option<Entry> {
     let filter = doc! {
         "text": text
     };
 
-    entries.find_one(filter).await.unwrap().unwrap()
+    let entry = entries.find_one(filter).await;
+
+    entry.unwrap()
 }
+
+pub async fn get_suggestions(queries: Collection<Query>, text: &str,should_find_any: bool,limit: i64,ignore_list: &Vec<String>) -> Vec<String> {
+
+    let mut symbol ="^";
+
+    if should_find_any{
+        symbol = "";
+
+    }
+
+    let filter = doc! {
+        "text": {
+            "$regex": format!("{}{}", symbol,regex::escape(text)),
+            "$options": "i",
+            "$nin": ignore_list
+        }
+    };
+
+
+    let mut cursor = queries.find(filter).sort(doc! {"frequency" : -1}).limit(limit).await.unwrap();
+    let mut result: Vec<String> = Vec::new();
+
+    while cursor.has_next() {
+        let text = cursor.next().await;
+        if text.is_none() {
+            break;
+        }
+        let text = text.unwrap();
+        if text.is_err() {
+            break;
+        }
+        let text = text.unwrap().text;
+        result.push(text.to_string());
+    }
+
+    return result;
+}
+
+
+pub async fn get_query_answer(queries: Collection<Query>, text: &str) -> Query {
+    let normalized = text.replace("?", "").trim().to_string();
+
+    let filter = doc! {
+        "normalized": normalized
+    };
+
+    let result = queries.find_one(filter).await.unwrap();
+
+    if result.is_none() {
+        return Query::default();
+    }
+
+    return result.unwrap();
+}
+
+
 
 pub async fn get_site(sites: Collection<Site>, site_id: String) -> Site {
     let site_id = ObjectId::parse_str(site_id).unwrap();
@@ -107,6 +188,43 @@ pub async fn update_page_rank(sites: Collection<Site>, site_id: String, page_ran
         Ok(_result) => {}
         Err(e) => {
             println!("Error update Page Rank in site: {:?}", e);
+        }
+    }
+}
+
+pub async fn update_query(queries: Collection<Query>,query: &String) {
+    let normalized = query.replace("?","").trim().to_string();
+
+    let filter = doc! {
+        "normalized" :normalized
+    };
+
+    let options = FindOneAndUpdateOptions::builder()
+        .upsert(true)
+        .return_document(ReturnDocument::After)
+        .build();
+
+    let update = doc! {
+        "$inc": {
+            "frequency": 1
+        },
+        "$setOnInsert": {
+            "text": query.trim(),
+            "normalized": query.replace("?","").trim(),
+            "short_answer": "",
+            "long_answer" : "",
+            "answer_type": "unknown",
+        }
+    };
+
+    match queries
+        .find_one_and_update(filter, update)
+        .with_options(options)
+        .await
+    {
+        Ok(_result) => {}
+        Err(e) => {
+            println!("Error update Query frequency : {:?}", e);
         }
     }
 }
@@ -261,7 +379,6 @@ pub async fn create_entry(
         "$set": set_doc
     };
 
-
     let options = FindOneAndUpdateOptions::builder()
         .return_document(ReturnDocument::After)
         .upsert(true)
@@ -317,4 +434,10 @@ pub async fn create_entry_for_image(
             println!("Duplicate Key {:?} in Cache", e);
         }
     }
+}
+
+
+
+pub async fn create_query(queries : Collection<Query>,query: Query) {
+    let result = queries.insert_one(query).await;
 }
