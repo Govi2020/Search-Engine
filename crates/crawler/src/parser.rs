@@ -130,7 +130,7 @@ pub fn get_meta_data(document: &Html, url: &str) -> HashMap<String, String> {
         if rel == "icon" {
             let base = Url::parse(
                 &Url::parse(url)
-                    .unwrap()
+                    .unwrap_or_default()
                     .origin()
                     .ascii_serialization()
                     .to_string(),
@@ -155,30 +155,32 @@ pub fn get_images(document: &Html, base_url: &str) -> HashMap<String, (String, S
         let src = image.value().attr("src").unwrap_or("");
         let alt = image.value().attr("alt").unwrap_or_default().to_string();
         let title = image.value().attr("title").unwrap_or_default().to_string();
-
-        if src == "" {
+    
+        if src.is_empty() {
             continue;
         }
-
-        let abs_url_handle = base.join(src);
-
-        if let Ok(mut abs_url) = abs_url_handle {
-            abs_url.set_query(None);
-            abs_url.set_fragment(None);
-
-            let filename = abs_url
-                .path_segments()
-                .unwrap()
-                .last()
-                .unwrap_or_default()
-                .to_string();
-
-            result
-                .entry(abs_url.to_string())
-                .or_insert((filename, alt, title));
+    
+        let Ok(mut abs_url) = base.join(src) else {
+            continue;
+        };
+    
+        if abs_url.scheme() != "http" && abs_url.scheme() != "https" {
+            continue;
         }
+    
+        abs_url.set_query(None);
+        abs_url.set_fragment(None);
+    
+        let filename = abs_url
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .unwrap_or_default()
+            .to_string();
+    
+        result
+            .entry(abs_url.to_string())
+            .or_insert((filename, alt, title));
     }
-
     result
 }
 
