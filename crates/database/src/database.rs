@@ -15,7 +15,7 @@ use dotenv::dotenv;
 pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Collection<Image>,Collection<Query>) {
     dotenv().ok();
 
-    let mongo_url = dotenv::var("MONGO_DB_URL")
+    let mongo_url = std::env::var("MONGO_DB_URL")
     .expect("MONGO_DB_URL environment variable is not set");
 
     println!("URL IS {:?}", mongo_url);
