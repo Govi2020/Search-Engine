@@ -110,11 +110,7 @@ async fn crawl_page(
     if queue.contains_key(&url) {
         return;
     }
-
-    if !(url == "https://opensource.google/") {
-        return;
-    }
-
+    
     let url_info = Url::parse(&url).unwrap();
     let origin = url_info.origin().ascii_serialization();
 
