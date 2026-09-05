@@ -7,8 +7,9 @@ jobs:
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 1440
+
     environment: production
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,4 +21,6 @@ jobs:
         run: cargo build --release -p crawler
 
       - name: Run crawler
+        env:
+          MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
         run: cargo run --release -p crawler
