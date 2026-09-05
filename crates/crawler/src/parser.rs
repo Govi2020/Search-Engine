@@ -130,7 +130,7 @@ pub fn get_meta_data(document: &Html, url: &str) -> HashMap<String, String> {
         if rel == "icon" {
             let base = Url::parse(
                 &Url::parse(url)
-                    .unwrap_or_default()
+                    .unwrap()
                     .origin()
                     .ascii_serialization()
                     .to_string(),
