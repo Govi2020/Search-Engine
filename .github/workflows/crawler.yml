@@ -7,6 +7,8 @@ jobs:
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 1440
+    environment: production
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
