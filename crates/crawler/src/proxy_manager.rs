@@ -28,6 +28,8 @@ impl ProxyRotator {
             });
         }
 
+        println!("*** Proxies Will Be Used ***");
+
         // add proxy ones
         for proxy_url in proxy_urls {
             let proxy = Proxy::all(proxy_url)?;
@@ -93,7 +95,6 @@ pub fn configure_proxies() -> ProxyRotator {
         proxy_list.push(url);
     };
 
-    println!("Proxy List : {:?}",proxy_list);
     return ProxyRotator::new(proxy_list.iter().map(String::as_str).collect()).unwrap();
 
 }
