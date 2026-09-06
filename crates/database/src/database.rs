@@ -12,7 +12,9 @@ use std::collections::HashMap;
 
 use dotenv::dotenv;
 
+
 pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Collection<Image>,Collection<Query>) {
+
     dotenv().ok();
 
     let mongo_url = std::env::var("MONGO_DB_URL")

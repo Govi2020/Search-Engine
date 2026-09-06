@@ -1,6 +1,7 @@
 mod fetcher;
 mod parser;
 mod robots;
+mod proxy_manager;
 mod sitemap;
 
 use common::utils;
@@ -11,7 +12,6 @@ use database_helper::schema::Site;
 
 use dashmap::DashMap;
 use mongodb::Collection;
-use reqwest::Client;
 use robots::RobotsWrapper;
 use std::collections::HashMap;
 use std::fs::File;
@@ -19,9 +19,14 @@ use std::io::{self, BufRead};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use url::Url;
+use dotenv::dotenv;
+
+use crate::proxy_manager::ProxyRotator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    dotenv().ok();
+
     let (entries, sites, images,_) = database::initialize_mongodb().await;
 
     let entries = Arc::new(entries);
@@ -29,9 +34,15 @@ async fn main() {
     let images = Arc::new(images);
     let visited_urls: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
     let queue: Arc<DashMap<String, bool>> = Arc::new(DashMap::new());
-    let semaphore = Arc::new(Semaphore::new(85));
+
+    let max_concurrency : usize = std::env::var("MAX_CONCURRENCY").unwrap_or("85".to_string()).parse().unwrap();
+
+
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
 
     let robots_list: Arc<DashMap<String, RobotsWrapper>> = Arc::new(DashMap::new());
+
+    let proxy_rotator = Arc::new(proxy_manager::configure_proxies());
 
     // let path = std::env::current_dir().unwrap();
 
@@ -44,8 +55,6 @@ async fn main() {
     let mut lines = reader.lines();
 
     let mut tasks: Vec<_> = Vec::new();
-
-    let client = Arc::new(Client::new());
 
     loop {
         let url = match lines.next() {
@@ -60,7 +69,7 @@ async fn main() {
         let queue = Arc::clone(&queue);
         let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
-        let client = Arc::clone(&client);
+        let proxy_rotator = Arc::clone(&proxy_rotator);
 
         tasks.push(tokio::spawn(async move {
             crawl_page(
@@ -72,7 +81,7 @@ async fn main() {
                 queue,
                 semaphore,
                 robots_list,
-                client,
+                proxy_rotator,
             )
             .await
         }));
@@ -105,7 +114,7 @@ async fn crawl_page(
     queue: Arc<DashMap<String, bool>>,
     semaphore: Arc<Semaphore>,
     robots_list: Arc<DashMap<String, RobotsWrapper>>,
-    client: Arc<Client>,
+    proxy_rotator: Arc<ProxyRotator>
 ) {
     if queue.contains_key(&url) {
         return;
@@ -140,6 +149,10 @@ async fn crawl_page(
 
     // Using the Permit to limit concorrent requests
     let permit = semaphore.acquire().await.unwrap();
+
+    // Getting the Proxy
+
+    let client = proxy_rotator.current().await;
 
     // Checking The Robots.txt
 
@@ -177,9 +190,9 @@ async fn crawl_page(
         let images = Arc::clone(&images);
         let visited_urls = Arc::clone(&visited_urls);
         let queue = Arc::clone(&queue);
-        let client = Arc::clone(&client);
         let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
+        let proxy_rotator = Arc::clone(&proxy_rotator);
         let url = url.to_string();
         // If i want i can check in the Queue and visited before making the task
         // TODO : For now i just put it here
@@ -203,16 +216,16 @@ async fn crawl_page(
                 queue,
                 semaphore,
                 robots_list,
-                client,
+                proxy_rotator
             )
             .await
         }));
     }
 
-    let html = match fetcher::get_html_from_url(&url, &client).await {
+    let html = match fetcher::get_html_from_url(&url, &client,&proxy_rotator,0).await {
         Ok(html) => html,
         Err(e) => {
-            println!("Error fetching {}: {:?}", url, e.status());
+            println!("Error fetching {}: {:?}", url,1);
             return;
         }
     };
@@ -303,9 +316,9 @@ async fn crawl_page(
         let images = Arc::clone(&images);
         let visited_urls = Arc::clone(&visited_urls);
         let queue = Arc::clone(&queue);
-        let client = Arc::clone(&client);
         let semaphore = Arc::clone(&semaphore);
         let robots_list = Arc::clone(&robots_list);
+        let proxy_rotator = Arc::clone(&proxy_rotator);
         let url = url.to_string();
 
         tasks.push(tokio::spawn(async move {
@@ -318,7 +331,7 @@ async fn crawl_page(
                 queue,
                 semaphore,
                 robots_list,
-                client,
+                proxy_rotator
             )
             .await
         }));

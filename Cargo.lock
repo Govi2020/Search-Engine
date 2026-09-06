@@ -453,6 +453,7 @@ dependencies = [
  "common",
  "dashmap",
  "database_helper",
+ "dotenv",
  "fast-robots",
  "futures",
  "mongodb",

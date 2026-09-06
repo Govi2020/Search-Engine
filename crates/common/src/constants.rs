@@ -67,3 +67,21 @@ pub fn language_to_algorithm(lang: Lang) -> Option<Algorithm> {
         _ => None,
     }
 }
+
+
+pub const RETRY_AFTER_TIME_CODES : &[i32] = &[
+    408, // Request Timeout
+    429, // Too Many Requests
+    500, // Internal Server Error
+    502, // Bad Gateway
+    503, // Service Unavailable
+    504, // Gateway Timeout
+];
+
+pub const RETRY_ANOTHER_PROXY_CODES : &[i32] = &[
+    // HTTP status alone is not strong evidence for proxy failure,
+    // so keep this list conservative.
+    407, // Proxy Authentication Required
+    502, // Bad Gateway
+    504, // Gateway Timeout
+];
