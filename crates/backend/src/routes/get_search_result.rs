@@ -30,7 +30,6 @@ pub async fn get_search_result(
 ) -> impl IntoResponse {
     // Remove ",","." etc
     // remove "this", "is" etc
-    //
 
     let entries = state.entries;
     let sites = state.sites;
@@ -45,6 +44,9 @@ pub async fn get_search_result(
 
     let language = utils::find_language(&query);
 
+    println!("Original Query is {:?}",query_filtered);
+    println!("Language is {:?}",language);
+
     let query_array: Vec<String> = utils::tokonize(&query_filtered, language);
 
     let mut site_rarity_mapping: HashMap<String, Vec<f64>> = HashMap::new();
@@ -52,8 +54,11 @@ pub async fn get_search_result(
 
     let start = Instant::now();
 
+    println!("The Query is {:?}",site_word_info_mapping);
     let futures = query_array.iter().map(async |word| {
         let entry = database::get_entry(entries.clone(), word).await;
+
+        println!("The Word is {:?}",word);
 
         if entry.is_some() {
             return entry.unwrap();

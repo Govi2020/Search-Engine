@@ -1,0 +1,32 @@
+name: Populate Initial Search Suggestions
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1440
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Import GooAQ Database
+        run: |
+          curl -L \
+            "https://github.com/allenai/gooaq/raw/refs/heads/main/data/gooaq.jsonl" \
+            -o gooaq.jsonl
+
+      - name: Build importer
+        run: cargo build --release -p gooaq-import
+
+      - name: Run importer
+        env:
+          MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
+          IS_PROXY: ${{ vars.IS_PROXY }}
+        run: cargo run --release -p gooaq-import

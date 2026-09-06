@@ -11,7 +11,17 @@ pub fn get_stemmer_word(word: &str, language: Algorithm) -> String {
 }
 
 pub fn find_language(text: &str) -> Algorithm {
+
+    let text = text.trim();
+
+    if text.split_whitespace().count() < 2 {
+        return Algorithm::English;
+
+    }
+
+
     let language = whichlang::detect_language(text);
+
 
     return constants::language_to_algorithm(language).unwrap_or(Algorithm::English);
 }
