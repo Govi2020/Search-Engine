@@ -16,43 +16,6 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install WireGuard
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wireguard
-
-      - name: Configure Proton VPN
-        env:
-          PROTON_WG_CONFIG: ${{ secrets.PROTON_WG_CONFIG }}
-        run: |
-          if [ -z "$PROTON_WG_CONFIG" ]; then
-            echo "PROTON_WG_CONFIG is missing"
-            exit 1
-          fi
-
-          printf '%s' "$PROTON_WG_CONFIG" | sudo tee /etc/wireguard/proton.conf > /dev/null
-          sudo chmod 600 /etc/wireguard/proton.conf
-
-      - name: Check IP before VPN
-        run: |
-          echo "Public IP before VPN:"
-          curl -4 https://api.ipify.org
-          echo
-
-      - name: Connect Proton VPN
-        run: |
-          sudo wg-quick up proton
-
-      - name: Verify VPN connection
-        run: |
-          echo "WireGuard status:"
-          sudo wg show
-
-          echo
-          echo "Public IP after VPN:"
-          curl -4 https://api.ipify.org
-          echo
-
       - name: Build crawler
         run: cargo build --release -p crawler
 
