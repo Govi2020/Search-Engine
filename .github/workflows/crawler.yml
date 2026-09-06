@@ -16,11 +16,19 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+
       - name: Build crawler
+        timeout-minutes: 20
         run: cargo build --release -p crawler
 
       - name: Run crawler
+        timeout-minutes: 330
         env:
           MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
-          IS_PROXY : ${{ vars.IS_PROXY }}
-        run: cargo run --release -p crawler
+          IS_PROXY: ${{ vars.IS_PROXY }}
+        run: ./target/release/crawler
