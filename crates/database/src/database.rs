@@ -28,6 +28,7 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Colle
 
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
+
     // Init Database and Collection
     let db = client.database("SearchEngine");
     let entries: Collection<Entry> = db.collection("entries");

@@ -31,4 +31,7 @@ jobs:
         env:
           MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
           IS_PROXY: ${{ vars.IS_PROXY }}
+          MAX_REQUESTS_WITH_EACH_PROXY: ${{ vars.MAX_REQUESTS_WITH_EACH_PROXY }}
+          MAX_CONCURRENCY: ${{ vars.MAX_CONCURRENCY }}
+
         run: ./target/release/crawler

@@ -1,4 +1,4 @@
-use std::{fs::File, sync::Arc};
+use std::{fs::File, sync::Arc, time::Duration};
 use reqwest::{Client, Proxy};
 use tokio::{sync::Mutex};
 use std::io::{self, BufRead};
@@ -15,7 +15,7 @@ impl ProxyRotator {
 
         // Build a non-proxy one
 
-        let client = Client::builder()
+        let client = Client::builder().connect_timeout(Duration::from_secs(5)).timeout(Duration::from_secs(10))
             .build()?;
 
         clients.push(Arc::new(client));
@@ -33,6 +33,7 @@ impl ProxyRotator {
             let proxy = Proxy::all(proxy_url)?;
 
             let client = Client::builder()
+                .connect_timeout(Duration::from_secs(5)).timeout(Duration::from_secs(10))
                 .proxy(proxy)
                 .build()?;
 
