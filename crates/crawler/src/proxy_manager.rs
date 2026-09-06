@@ -81,7 +81,6 @@ pub fn configure_proxies() -> ProxyRotator {
     let mut lines = reader.lines();
 
     let mut proxy_list = Vec::new();
-    proxy_list.push("".to_string());
 
 
     loop {
