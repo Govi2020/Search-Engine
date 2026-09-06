@@ -20,7 +20,7 @@ impl ProxyRotator {
 
         clients.push(Arc::new(client));
 
-        if std::env::var("IS_PROXY").unwrap() == "0" {
+        if std::env::var("IS_PROXY").unwrap_or("1".to_string()) == "0" {
             return Ok(Self {
                 clients,
                 current: Mutex::new(0),
