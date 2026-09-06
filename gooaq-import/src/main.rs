@@ -18,7 +18,7 @@ struct QueryData {
 #[tokio::main]
 async fn main() {
     // 1. Open the file path safely
-    let path = Path::new("gogol.jsonl");
+    let path = Path::new("gooaq.jsonl");
     let file = File::open(&path).unwrap();
 
     let (_,_,_,queries) = database::initialize_mongodb().await;
