@@ -20,6 +20,13 @@ impl ProxyRotator {
 
         clients.push(Arc::new(client));
 
+        if std::env::var("IS_PROXY").unwrap() == "0" {
+            return Ok(Self {
+                clients,
+                current: Mutex::new(0),
+                count: 0
+            });
+        }
 
         // add proxy ones
         for proxy_url in proxy_urls {
@@ -68,7 +75,7 @@ impl ProxyRotator {
 pub fn configure_proxies() -> ProxyRotator {
 
 
-    let seed_file = File::open("proxies.txt").unwrap();
+    let seed_file = File::open("proxy_list.txt").unwrap();
 
     let reader = io::BufReader::new(seed_file);
     let mut lines = reader.lines();
