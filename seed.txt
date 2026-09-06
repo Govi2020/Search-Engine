@@ -7,7 +7,6 @@ https://openlibrary.org/
 https://archive.org/
 https://www.gutenberg.org/
 https://standardebooks.org/
-https://www.semanticscholar.org/
 https://www.openstreetmap.org/
 https://commoncrawl.org/
 https://arxiv.org/
@@ -15,9 +14,6 @@ https://arxiv.org/list/cs.AI/recent
 https://arxiv.org/list/cs.LG/recent
 https://arxiv.org/archive/math
 https://arxiv.org/list/physics/recent
-https://pubmed.ncbi.nlm.nih.gov/
-https://pmc.ncbi.nlm.nih.gov/
-https://www.ncbi.nlm.nih.gov/
 https://www.science.org/
 https://www.nature.com/
 https://www.nature.com/subjects
