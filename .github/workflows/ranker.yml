@@ -1,4 +1,5 @@
-name: Run Crawler
+
+name: Run Ranker
 
 on:
   workflow_dispatch:
@@ -6,7 +7,7 @@ on:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 1440
     environment: production
 
     steps:
@@ -16,11 +17,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build crawler
-        run: cargo build --release -p crawler
+      - name: Build ranker
+        run: cargo build --release -p ranker
 
       - name: Run crawler
         env:
           MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
           IS_PROXY : ${{ vars.IS_PROXY }}
-        run: cargo run --release -p crawler
+        run: cargo run --release -p ranker
