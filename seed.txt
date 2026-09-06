@@ -72,14 +72,8 @@ https://www.data.gov/
 https://data.europa.eu/
 https://www.usa.gov/
 https://www.gov.uk/
-https://www.india.gov.in/
 https://www.rbi.org.in/
 https://www.ugc.gov.in/
-https://www.ncert.nic.in/
-https://www.nta.ac.in/
-https://jeemain.nta.nic.in/
-https://www.kerala.gov.in/
-https://www.isro.gov.in/
 https://www.iisc.ac.in/
 https://www.investopedia.com/
 https://www.economist.com/
@@ -140,6 +134,5 @@ https://www.hgtv.com/
 https://www.caranddriver.com/
 https://www.motortrend.com/
 https://www.autocarindia.com/
-https://www.reddit.com/
 https://www.producthunt.com/
 https://www.ycombinator.com/

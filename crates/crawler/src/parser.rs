@@ -76,12 +76,15 @@ fn get_child_text(element: ElementRef, output: &mut String) {
 
                         let filename = base
                             .join(&src)
-                            .unwrap()
-                            .path_segments()
-                            .unwrap()
-                            .last()
-                            .unwrap_or_default()
-                            .to_string();
+                            .ok()
+                            .and_then(|url| {
+                                url.path_segments()
+                                    .and_then(|segments| segments.last())
+                                    .filter(|name| !name.is_empty())
+                                    .map(str::to_string)
+                            })
+                            .unwrap_or_default();
+
 
                         let clean_filename = utils::format_file_name(filename);
 

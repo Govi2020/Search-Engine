@@ -22,4 +22,5 @@ jobs:
       - name: Run crawler
         env:
           MONGO_DB_URL: ${{ vars.MONGO_DB_URL }}
+          IS_PROXY : ${{ vars.IS_PROXY }}
         run: cargo run --release -p crawler
