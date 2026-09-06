@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  crawl:
+  setup_database:
     runs-on: ubuntu-latest
     timeout-minutes: 1440
     environment: production
