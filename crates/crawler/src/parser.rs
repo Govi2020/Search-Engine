@@ -222,52 +222,90 @@ pub fn arrange_count(words: Vec<String>) -> HashMap<String, i32> {
     return word_freq_count;
 }
 
-pub fn calculate_importance(document: &Html, word: &str) -> i32 {
-    let mut importance = 0;
 
-    let title_selector = Selector::parse("title").unwrap();
-    if let Some(title_element) = document.select(&title_selector).next() {
-        let text = title_element.text().collect::<String>();
-        if text.contains(word) {
+
+pub struct DocumentImportance {
+    title: String,
+    h1: Vec<String>,
+    h2: Vec<String>,
+    h3: Vec<String>,
+    p: Vec<String>,
+}
+
+impl DocumentImportance {
+    pub fn new(document: &Html) -> Self {
+        let title_selector = Selector::parse("title").unwrap();
+        let h1_selector = Selector::parse("h1").unwrap();
+        let h2_selector = Selector::parse("h2").unwrap();
+        let h3_selector = Selector::parse("h3").unwrap();
+        let p_selector = Selector::parse("p").unwrap();
+
+        let title = document
+            .select(&title_selector)
+            .next()
+            .map(|element| element.text().collect::<String>())
+            .unwrap_or_default();
+
+        let h1 = document
+            .select(&h1_selector)
+            .map(|element| element.text().collect::<String>())
+            .collect();
+
+        let h2 = document
+            .select(&h2_selector)
+            .map(|element| element.text().collect::<String>())
+            .collect();
+
+        let h3 = document
+            .select(&h3_selector)
+            .map(|element| element.text().collect::<String>())
+            .collect();
+
+        let p = document
+            .select(&p_selector)
+            .map(|element| element.text().collect::<String>())
+            .collect();
+
+        Self {
+            title,
+            h1,
+            h2,
+            h3,
+            p,
+        }
+    }
+
+    pub fn calculate(&self, word: &str) -> i32 {
+        let mut importance = 0;
+
+        if self.title.contains(word) {
             importance += 10;
         }
-    }
 
-    let h1_selector = Selector::parse("h1").unwrap();
-    let h1_elements = document.select(&h1_selector);
-    for h1_element in h1_elements {
-        let text = h1_element.text().collect::<String>();
-        if text.contains(word) {
-            importance += 8;
+        for text in &self.h1 {
+            if text.contains(word) {
+                importance += 8;
+            }
         }
-    }
 
-    let h2_selector = Selector::parse("h2").unwrap();
-    let h2_elements = document.select(&h2_selector);
-    for h2_element in h2_elements {
-        let text = h2_element.text().collect::<String>();
-        if text.contains(word) {
-            importance += 5;
+        for text in &self.h2 {
+            if text.contains(word) {
+                importance += 5;
+            }
         }
-    }
 
-    let h3_selector = Selector::parse("h3").unwrap();
-    let h3_elements = document.select(&h3_selector);
-    for h3_element in h3_elements {
-        let text = h3_element.text().collect::<String>();
-        if text.contains(word) {
-            importance += 3;
+        for text in &self.h3 {
+            if text.contains(word) {
+                importance += 3;
+            }
         }
-    }
 
-    let p_selector = Selector::parse("p").unwrap();
-    let p_elements = document.select(&p_selector);
-    for p_element in p_elements {
-        let text = p_element.text().collect::<String>();
-        if text.contains(word) {
-            importance += 1;
+        for text in &self.p {
+            if text.contains(word) {
+                importance += 1;
+            }
         }
-    }
 
-    return importance;
+        importance
+    }
 }

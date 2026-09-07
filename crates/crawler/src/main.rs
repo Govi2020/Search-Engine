@@ -20,7 +20,9 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use url::Url;
 use dotenv::dotenv;
+use std::time::Instant;
 
+use crate::parser::DocumentImportance;
 use crate::proxy_manager::ProxyRotator;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -157,8 +159,10 @@ async fn crawl_page(
     // Checking The Robots.txt
 
     let site_map_urls: Vec<String>;
+    println!("Started {:?}",url);
 
     if robots_list.contains_key(&origin) {
+        println!("Started RObots and Sitemap");
         let robots = robots_list.get(&origin).unwrap();
 
         if !robots.is_allowed(&url) {
@@ -166,7 +170,9 @@ async fn crawl_page(
         }
 
         site_map_urls = robots.sitemap.clone();
+        println!("finished RObots and Sitemap");
     } else {
+        println!("Started RObots and Sitemap");
         let robots: RobotsWrapper = robots::get_robots(&url, &client).await;
 
         if !robots.is_allowed(&url) {
@@ -179,6 +185,8 @@ async fn crawl_page(
         site_map_urls = Vec::new();
 
         robots_list.insert(origin, robots);
+
+        println!("finished RObots and Sitemap");
     }
 
     let mut sitemap_tasks: Vec<_> = Vec::new();
@@ -222,6 +230,8 @@ async fn crawl_page(
         }));
     }
 
+    println!("START REQ");
+
     let html = match fetcher::get_html_from_url(&url, &client,&proxy_rotator,0).await {
         Ok(html) => html,
         Err(e) => {
@@ -233,7 +243,6 @@ async fn crawl_page(
     if html == "" {
         return;
     }
-
     // Extracting All of the data
     let (meta_data, link_list, total_no_of_words, word_scores, images_list) =
         process_html(&html, &url);
@@ -262,6 +271,9 @@ async fn crawl_page(
     // treated a content in sites and so create_entry can actually create entry for both site and
     // image at the same time so do it
 
+
+    println!("start image scores");
+
     for (id, info) in new_image_list {
         let file_name_formated = utils::format_file_name(info.0);
 
@@ -286,6 +298,9 @@ async fn crawl_page(
         }
     }
 
+
+    println!("end image scores");
+
     for (word, count, importance) in &word_scores {
         let images_info: HashMap<String, u32> = image_word_scores
             .get(word)
@@ -304,13 +319,20 @@ async fn crawl_page(
         .await;
     }
 
+
+
+    println!("end entry creation scores");
     visited_urls.insert(url.clone(), true);
 
     let mut tasks: Vec<_> = Vec::new();
 
+
+    println!("{:?}",link_list.to_vec());
     drop(permit);
 
+
     for url in link_list {
+        println!("{:?}",url);
         let entries = Arc::clone(&entries);
         let sites = Arc::clone(&sites);
         let images = Arc::clone(&images);
@@ -375,14 +397,25 @@ fn process_html(
 
     let word_freq_count: HashMap<String, i32> = parser::arrange_count(word_tokens.clone());
 
+
+
+
+    let documentImportance = DocumentImportance::new(&document);
+
     let word_scores: Vec<(String, usize, i32)> = word_tokens
         .iter()
         .map(|word| {
             let count = word_freq_count.get(word).copied().unwrap_or(0);
-            let importance = parser::calculate_importance(&document, word);
+
+            let importance_start = Instant::now();
+            let importance = documentImportance.calculate(&word);
+
+
             (word.clone(), count as usize, importance)
         })
         .collect();
+
+
 
     return (meta_data, link_list, total_no_of_words, word_scores, images);
 }
