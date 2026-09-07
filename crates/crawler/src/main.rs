@@ -163,7 +163,6 @@ async fn crawl_page(
     println!("Started {:?}",url);
 
     if robots_list.contains_key(&origin) {
-        println!("Started RObots and Sitemap");
         let robots = robots_list.get(&origin).unwrap();
 
         if !robots.is_allowed(&url) {
@@ -171,9 +170,7 @@ async fn crawl_page(
         }
 
         site_map_urls = robots.sitemap.clone();
-        println!("finished RObots and Sitemap");
     } else {
-        println!("Started RObots and Sitemap");
         let robots: RobotsWrapper = robots::get_robots(&url, &client).await;
 
         if !robots.is_allowed(&url) {
@@ -187,7 +184,6 @@ async fn crawl_page(
 
         robots_list.insert(origin, robots);
 
-        println!("finished RObots and Sitemap");
     }
 
     let mut sitemap_tasks: Vec<_> = Vec::new();
@@ -231,7 +227,6 @@ async fn crawl_page(
         }));
     }
 
-    println!("START REQ");
 
     let html = match fetcher::get_html_from_url(&url, &client,&proxy_rotator,0).await {
         Ok(html) => html,
@@ -273,7 +268,6 @@ async fn crawl_page(
     // image at the same time so do it
 
 
-    println!("start image scores");
 
     for (id, info) in new_image_list {
         let file_name_formated = utils::format_file_name(info.0);
@@ -300,7 +294,6 @@ async fn crawl_page(
     }
 
 
-    println!("end image scores");
 
     let bulk_batch_size: usize = std::env::var("BULK_DATABASE_OPERATION_BATCH_SIZE")
         .unwrap_or_else(|_| "100".to_string())
@@ -339,13 +332,11 @@ async fn crawl_page(
         }
     }
 
-    println!("end entry creation scores");
     visited_urls.insert(url.clone(), true);
 
     let mut tasks: Vec<_> = Vec::new();
 
 
-    println!("{:?}",link_list.to_vec());
     drop(permit);
 
 
