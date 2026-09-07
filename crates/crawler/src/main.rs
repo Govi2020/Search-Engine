@@ -12,6 +12,7 @@ use database_helper::schema::Site;
 
 use dashmap::DashMap;
 use mongodb::Collection;
+use mongodb::options::WriteModel;
 use robots::RobotsWrapper;
 use std::collections::HashMap;
 use std::fs::File;
@@ -301,13 +302,19 @@ async fn crawl_page(
 
     println!("end image scores");
 
+    let bulk_batch_size: usize = std::env::var("BULK_DATABASE_OPERATION_BATCH_SIZE")
+        .unwrap_or_else(|_| "100".to_string())
+        .parse()
+        .unwrap_or(100);
+    let mut bulk_operations: Vec<WriteModel> = Vec::with_capacity(bulk_batch_size + 1);
+
     for (word, count, importance) in &word_scores {
         let images_info: HashMap<String, u32> = image_word_scores
             .get(word)
             .unwrap_or(&HashMap::new())
             .clone();
 
-        database::create_entry(
+        let operation = database::create_entry_operation(
             &entries,
             word,
             *count,
@@ -315,11 +322,22 @@ async fn crawl_page(
             *importance,
             images_info,
             &site_id,
-        )
-        .await;
+        );
+
+        bulk_operations.push(operation);
+
+        if bulk_operations.len() >= bulk_batch_size {
+            if let Err(e) = database::bulk_create_entries(&entries, std::mem::take(&mut bulk_operations)).await {
+                println!("Bulk write error: {:?}", e);
+            }
+        }
     }
 
-
+    if !bulk_operations.is_empty() {
+        if let Err(e) = database::bulk_create_entries(&entries, bulk_operations).await {
+            println!("Bulk write error (final): {:?}", e);
+        }
+    }
 
     println!("end entry creation scores");
     visited_urls.insert(url.clone(), true);

@@ -6,11 +6,12 @@ use mongodb::bson::{doc, Document};
 use regex;
 
 use futures::stream::TryStreamExt;
-use mongodb::options::{ClientOptions, FindOneAndUpdateOptions, IndexOptions, ReturnDocument};
+use mongodb::options::{ClientOptions, FindOneAndUpdateOptions, IndexOptions, ReturnDocument, UpdateOneModel, UpdateOptions, WriteModel};
 use mongodb::{Client, Collection, IndexModel};
 use std::collections::HashMap;
 
 use dotenv::dotenv;
+use std::time::Duration;
 
 
 pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Collection<Image>,Collection<Query>) {
@@ -18,13 +19,14 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Colle
     dotenv().ok();
 
     let mongo_url = std::env::var("MONGO_DB_URL")
-    .expect("MONGO_DB_URL environment variable is not set");
+        .expect("MONGO_DB_URL environment variable is not set");
 
-    println!("URL IS {:?}", mongo_url);
-
-    let client_options = ClientOptions::parse(mongo_url)
+    let mut client_options = ClientOptions::parse(mongo_url)
         .await
         .expect("Failed to parse MongoDB connection string");
+
+    // Fail fast instead of hanging the crawl when Atlas is unreachable
+    client_options.server_selection_timeout = Some(Duration::from_millis(15_000));
 
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
 
@@ -50,9 +52,12 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Colle
             })
             .build();
 
-    queries.create_index(index).await;
+    queries
+        .create_index(index)
+        .await
+        .expect("Failed to create compound index");
 
-    (entries, sites, images,queries)
+    (entries, sites, images, queries)
 }
 
 async fn create_indexes<T>(collection: &Collection<T>, field: &str,is_unique: bool,sort: i32)
@@ -347,6 +352,55 @@ pub async fn create_image(
     }
 }
 
+pub fn create_entry_operation(
+    entries: &Collection<Entry>,
+    word: &str,
+    count: usize,
+    total_no_of_words: usize,
+    importance: i32,
+    images_info: HashMap<String, u32>,
+    _site_id: &str,
+) -> WriteModel {
+
+    let filter = doc! { "text": word };
+
+    let term_frequency = count as f64 / total_no_of_words as f64;
+
+    let mut set_doc = Document::new();
+
+    set_doc.insert("text", word);
+
+    // Create the nested document
+    let site_doc = doc! {
+        "count": count as i32,
+        "term_frequency": term_frequency,
+        "importance": importance,
+    };
+
+    // Dynamic field name
+    set_doc.insert(format!("map.{}", _site_id.to_string()), site_doc);
+    if images_info.len() == 0 {
+        set_doc.insert("images", doc! {});
+    }
+
+    for (image_id, score) in images_info {
+        set_doc.insert(format!("images.{}", image_id), score);
+    }
+    let update = doc! {
+        "$set": set_doc
+    };
+
+    let options = UpdateOneModel::builder()
+        .namespace(entries.namespace())
+        .filter(filter)
+        .update(update)
+        .upsert(true)
+        .build();
+
+
+    return WriteModel::UpdateOne(options);
+}
+
 pub async fn create_entry(
     entries: &Collection<Entry>,
     word: &str,
@@ -384,13 +438,12 @@ pub async fn create_entry(
         "$set": set_doc
     };
 
-    let options = FindOneAndUpdateOptions::builder()
-        .return_document(ReturnDocument::After)
+    let options = UpdateOptions::builder()
         .upsert(true)
         .build();
 
     match entries
-        .find_one_and_update(filter, update)
+        .update_one(filter, update)
         .with_options(options)
         .await
     {
@@ -442,6 +495,23 @@ pub async fn create_entry_for_image(
 }
 
 
+
+pub async fn bulk_create_entries(
+    entries: &Collection<Entry>,
+    operations: Vec<WriteModel>,
+) -> mongodb::error::Result<()> {
+    if operations.is_empty() {
+        return Ok(());
+    }
+
+    entries
+        .client()
+        .bulk_write(operations)
+        .ordered(false)
+        .await?;
+
+    Ok(())
+}
 
 pub async fn create_query(queries : Collection<Query>,query: Query) {
     let result = queries.insert_one(query).await;
