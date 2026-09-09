@@ -13,7 +13,9 @@ pub struct WordInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub text: String,
+    #[serde(default)]
     pub map: HashMap<String, WordInfo>,
+    #[serde(default)]
     pub images: HashMap<String, u32>,
 }
 

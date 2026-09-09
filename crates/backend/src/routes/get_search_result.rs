@@ -1,8 +1,13 @@
+
+
 use axum::http::{HeaderMap, StatusCode};
-use futures::future;
+use futures::TryStreamExt;
+use mongodb::Collection;
+use mongodb::bson::doc;
+use mongodb::bson::oid::ObjectId;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::{cmp::Ordering, hash::Hash};
+use std::cmp::Ordering;
 
 use database_helper::{
     database,
@@ -22,6 +27,21 @@ use crate::AppState;
 #[derive(Deserialize)]
 pub struct SearchQueryParams {
     query: String,
+}
+
+pub async fn get_sites_by_ids(
+    collection: Collection<Site>,
+    ids: Vec<ObjectId>,
+) -> mongodb::error::Result<Vec<Site>> {
+    collection
+        .find(doc! {
+            "_id": {
+                "$in": ids
+            }
+        })
+        .await?
+        .try_collect()
+        .await
 }
 
 pub async fn get_search_result(
@@ -54,24 +74,12 @@ pub async fn get_search_result(
 
     let start = Instant::now();
 
-    println!("The Query is {:?}",site_word_info_mapping);
-    let futures = query_array.iter().map(async |word| {
-        let entry = database::get_entry(entries.clone(), word).await;
+    // Single round-trip: fetch all entries for every query word at once,
+    // projecting out the unused images field.
+    let query_entry_list: Vec<Entry> = database::get_entries_batch(&entries, &query_array)
+        .await
+        .unwrap_or_default();
 
-        println!("The Word is {:?}",word);
-
-        if entry.is_some() {
-            return entry.unwrap();
-        } else {
-            return Entry {
-                text: "".to_string(),
-                map: HashMap::new(),
-                images: HashMap::new(),
-            };
-        }
-    });
-
-    let query_entry_list : Vec<Entry> = futures::future::join_all(futures).await;
     let mut temp_hash_map: HashMap<String, ()> = HashMap::new();
 
     for query_entry in query_entry_list {
@@ -93,27 +101,21 @@ pub async fn get_search_result(
         }
     }
 
-    let mut tasks = Vec::new();
+    let site_ids: Vec<ObjectId> = temp_hash_map
+        .keys()
+        .filter_map(|id| ObjectId::parse_str(id).ok())
+        .collect();
 
-    for (site_id, _) in temp_hash_map {
-        let sites = sites.clone();
+    let sites = get_sites_by_ids(sites.clone(), site_ids).await.unwrap();
 
-        tasks.push(async move {
-            let site = database::get_site(sites, site_id).await;
 
-            let id = site.id.unwrap().to_string();
+    let mut site_hash_map : HashMap<String,Site> = HashMap::new();
 
-            (id, site)
-        });
+    for site in sites {
+        site_hash_map.insert(site.id.unwrap().to_string(),site);
+
     }
 
-    let results = future::join_all(tasks).await;
-
-    let mut site_hash_map = HashMap::new();
-
-    for (id, site) in results {
-        site_hash_map.insert(id, site);
-    }
 
     let mut largest_len = 0;
 

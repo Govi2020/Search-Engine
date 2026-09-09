@@ -1,11 +1,10 @@
 use axum::http::{HeaderMap, StatusCode};
 use database_helper::schema::Image;
-use futures::future;
+use futures::{StreamExt, TryStreamExt};
+use mongodb::bson::doc;
+use mongodb::Collection;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use std::collections::HashMap;
-
-use database_helper::{database, schema::Site,schema::Entry};
 
 use axum::response::IntoResponse;
 use axum::{
@@ -28,17 +27,14 @@ struct ImagesResult {
     site: Site,
 }
 
+use database_helper::schema::Site;
+
 pub async fn get_image_result(
     query_params: Query<SearchQueryParams>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    // Remove ",","." etc
-    // remove "this", "is" etc
-    //
-
-    let entries = state.entries;
-    let sites = state.sites;
     let images = state.images;
+    let sites = state.sites;
 
     let query = query_params.query.clone();
     let query_filtered = utils::remove_unneeded_words(&query);
@@ -47,163 +43,120 @@ pub async fn get_image_result(
 
     let query_array: Vec<String> = utils::tokonize(&query_filtered, language);
 
-    let mut image_score_mapping: HashMap<String, Vec<u32>> = HashMap::new();
-
     let start = Instant::now();
 
+    // Rank all images that mention any query word in alt / title / file_name.
+    let mut candidates: Vec<(Image, u32, usize)> = Vec::new();
+    if !query_array.is_empty() {
+        let regex = format!(
+            "{}",
+            regex::escape(&query_array.join("|"))
+        );
 
-    let futures = query_array.iter().map(async |word| {
-        let entry = database::get_entry(entries.clone(), word).await;
+        let filter = doc! {
+            "$or": [
+                { "alt": { "$regex": regex.clone(), "$options": "i" } },
+                { "title": { "$regex": regex.clone(), "$options": "i" } },
+                { "file_name": { "$regex": regex, "$options": "i" } },
+            ]
+        };
 
-        if entry.is_some() {
-            return entry.unwrap();
-        } else {
-            return Entry {
-                text: "".to_string(),
-                map: HashMap::new(),
-                images: HashMap::new(),
-            };
+        let mut cursor = match images.find(filter).limit(100).await {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Image query error: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(Vec::<ImagesResult>::new()));
+            }
+        };
+
+        while let Some(Ok(image)) = cursor.next().await {
+            let mut matched_words = 0;
+            let mut total_score: u32 = 0;
+
+            let alt = image.alt.to_lowercase();
+            let title = image.title.to_lowercase();
+            let file_name = image.file_name.to_lowercase();
+
+            for word in &query_array {
+                let w = word.to_lowercase();
+                if alt.contains(&w) || title.contains(&w) || file_name.contains(&w) {
+                    matched_words += 1;
+                    total_score += 1;
+                }
+            }
+
+            if matched_words > 0 {
+                candidates.push((image, total_score, matched_words));
+            }
         }
-    });
+    }
 
-    let query_entry_list = futures::future::join_all(futures).await;
-    let mut temp_hash_map: HashMap<String, ()> = HashMap::new();
-
-    for query_entry in query_entry_list {
-        for (key, value) in &(query_entry.images) {
-            let key = key.to_string();
-
-            temp_hash_map.entry(key.clone()).or_insert(());
-
-            image_score_mapping
-                .entry(key.clone())
-                .or_default()
-                .push(value.clone());
+    // Load the site for every candidate in one round-trip.
+    let mut site_ids: Vec<mongodb::bson::oid::ObjectId> = Vec::new();
+    for (image, _, _) in &candidates {
+        if let Ok(id) = mongodb::bson::oid::ObjectId::parse_str(&image.site) {
+            site_ids.push(id);
         }
     }
-
-    let mut image_tasks = Vec::new();
-
-    for (image_id, _) in temp_hash_map {
-        let images = images.clone();
-
-        image_tasks.push(async move {
-            let image = database::get_image(images, image_id).await;
-
-            let id = image.id.unwrap().to_string();
-
-            (id, image)
-        });
-    }
-
-    let image_results = future::join_all(image_tasks).await;
-
-    let mut image_hash_map: HashMap<String, Image> = HashMap::new();
-
-    for (id, image) in image_results {
-        image_hash_map.insert(id, image);
-    }
-
-    let mut site_tasks = Vec::new();
-
-    for (_, image) in &image_hash_map {
-        let sites = sites.clone();
-        let site_id = image.site.to_string();
-
-        site_tasks.push(async move {
-            let site = database::get_site(sites, site_id).await;
-
-            let id = site.id.unwrap().to_string();
-
-            (id, site)
-        });
-    }
-
-    let site_results = future::join_all(site_tasks).await;
+    site_ids.dedup();
 
     let mut site_hash_map: HashMap<String, Site> = HashMap::new();
-
-    for (id, site) in site_results {
-        site_hash_map.insert(id, site);
-    }
-
-    let mut largest_len = 0;
-
-    let mut word_freq: HashMap<usize, Vec<String>> = HashMap::new();
-
-    for (key, value) in &image_score_mapping {
-        let length = value.len();
-
-        word_freq.entry(length).or_default().push(key.to_string());
-
-        if largest_len < length {
-            largest_len = length;
-        }
-    }
-
-    let mut final_vector: Vec<String> = Vec::new();
-
-    while largest_len > 0 {
-        if let Some(image_vector) = word_freq.get(&largest_len) {
-            let mut score_sheet: HashMap<String, f64> = HashMap::new();
-
-            for image_id in image_vector {
-                let mut final_score = 0.0;
-                let mut page_rank = site_hash_map
-                    .get(&image_hash_map.get(image_id).unwrap().site)
-                    .unwrap()
-                    .page_rank;
-
-                if page_rank == 0.0 {
-                    page_rank = 0.001;
+    if !site_ids.is_empty() {
+        let site_docs = match sites.find(doc! { "_id": { "$in": site_ids } }).await {
+            Ok(c) => match c.try_collect::<Vec<Site>>().await {
+                Ok(docs) => docs,
+                Err(e) => {
+                    println!("Site fetch error: {:?}", e);
+                    Vec::new()
                 }
-
-                for score in image_score_mapping.get(image_id).unwrap() {
-                    final_score += *score as f64;
-                }
-                score_sheet.insert(image_id.to_string(), final_score * page_rank);
+            },
+            Err(e) => {
+                println!("Site query error: {:?}", e);
+                Vec::new()
             }
-
-            let mut sorted: Vec<_> = score_sheet.iter().collect();
-
-            sorted.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(Ordering::Equal));
-
-            // println!("{:#?}", sorted);
-
-            for item in sorted {
-                final_vector.push(item.0.to_string());
-            }
-        }
-
-        largest_len -= 1;
-    }
-
-    let futures = final_vector
-        .iter()
-        .map(|id| image_hash_map.get(id).unwrap().clone());
-
-    let image_list = futures.collect::<Vec<Image>>();
-
-    let mut result: Vec<ImagesResult> = Vec::new();
-
-    println!("{:?}", image_list);
-
-    for image in image_list {
-        let site = site_hash_map.get(&image.site).unwrap();
-        let url = image.url;
-
-        let image_result = ImagesResult {
-            url: url,
-            site: site.clone(),
         };
-        result.push(image_result);
+
+        for site in site_docs {
+            if let Some(id) = site.id {
+                site_hash_map.insert(id.to_string(), site);
+            }
+        }
     }
+
+    // Sort: most matched words first, then total score, then page rank.
+    candidates.sort_by(|a, b| {
+        b.2.cmp(&a.2)
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| {
+                let pa = site_hash_map
+                    .get(&a.0.site)
+                    .map(|s| s.page_rank)
+                    .unwrap_or(0.0);
+                let pb = site_hash_map
+                    .get(&b.0.site)
+                    .map(|s| s.page_rank)
+                    .unwrap_or(0.0);
+                pb.partial_cmp(&pa).unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    let mut result: Vec<ImagesResult> = Vec::with_capacity(candidates.len());
+    for (image, _, _) in candidates.into_iter().take(50) {
+        let url = image.url.clone();
+        if let Some(site) = site_hash_map.get(&image.site) {
+            result.push(ImagesResult {
+                url,
+                site: site.clone(),
+            });
+        }
+    }
+
     let duration = start.elapsed();
     let mut headers = HeaderMap::new();
-
     headers.insert(
         "x-search-time-ms",
         duration.subsec_millis().to_string().parse().unwrap(),
     );
-    return (StatusCode::OK, headers, Json(result));
+
+    (StatusCode::OK, headers, Json(result))
 }

@@ -183,6 +183,7 @@ dependencies = [
  "database_helper",
  "futures",
  "mongodb",
+ "regex",
  "serde",
  "tokio",
  "tower-http 0.5.2",

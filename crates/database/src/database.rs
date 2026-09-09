@@ -96,6 +96,36 @@ pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Option<Entry> 
     entry.unwrap()
 }
 
+/// Fetch all entries for a batch of query words in a single round-trip.
+/// Projects out the `images` field (not used by search) to cut payload and
+/// deserialization cost.
+pub async fn get_entries_batch(
+    entries: &Collection<Entry>,
+    words: &[String],
+) -> mongodb::error::Result<Vec<Entry>> {
+    if words.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let filter = doc! {
+        "text": {
+            "$in": words
+        }
+    };
+
+    let projection = doc! {
+        "text": 1,
+        "map": 1,
+        "_id": 0
+    };
+
+    let options = mongodb::options::FindOptions::builder()
+        .projection(projection)
+        .build();
+
+    entries.find(filter).with_options(options).await?.try_collect().await
+}
+
 pub async fn get_suggestions(queries: Collection<Query>, text: &str,should_find_any: bool,limit: i64,ignore_list: &Vec<String>) -> Vec<String> {
 
     let mut symbol ="^";
@@ -105,13 +135,25 @@ pub async fn get_suggestions(queries: Collection<Query>, text: &str,should_find_
 
     }
 
-    let filter = doc! {
+    let regex_match = doc! {
         "text": {
             "$regex": format!("{}{}", symbol,regex::escape(text)),
-            "$options": "i",
-            "$nin": ignore_list
+            "$options": "i"
         }
     };
+
+    let filter;
+    if ignore_list.is_empty() {
+        filter = regex_match;
+    } else {
+        let ignore: Vec<String> = ignore_list.clone();
+        filter = doc! {
+            "$and": [
+                regex_match,
+                { "text": { "$nin": ignore } }
+            ]
+        };
+    }
 
 
     let mut cursor = queries.find(filter).sort(doc! {"frequency" : -1}).limit(limit).await.unwrap();

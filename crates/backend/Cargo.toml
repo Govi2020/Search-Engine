@@ -11,4 +11,5 @@ common = { path = "../common" }
 mongodb = "3"
 serde = "1.0.228"
 futures = "0.3.33"
+regex = "1.13.1"
 tower-http = { version = "0.5", features = ["cors"] }
