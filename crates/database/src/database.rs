@@ -25,7 +25,6 @@ pub async fn initialize_mongodb() -> (Collection<Entry>, Collection<Site>, Colle
         .await
         .expect("Failed to parse MongoDB connection string");
 
-    // Fail fast instead of hanging the crawl when Atlas is unreachable
     client_options.server_selection_timeout = Some(Duration::from_millis(15_000));
 
     let client = Client::with_options(client_options).expect("Failed to create MongoDB client");
@@ -96,9 +95,6 @@ pub async fn get_entry(entries: Collection<Entry>, text: &str) -> Option<Entry> 
     entry.unwrap()
 }
 
-/// Fetch all entries for a batch of query words in a single round-trip.
-/// Projects out the `images` field (not used by search) to cut payload and
-/// deserialization cost.
 pub async fn get_entries_batch(
     entries: &Collection<Entry>,
     words: &[String],
@@ -130,9 +126,8 @@ pub async fn get_suggestions(queries: Collection<Query>, text: &str,should_find_
 
     let mut symbol ="^";
 
-    if should_find_any{
+    if !should_find_any{
         symbol = "";
-
     }
 
     let regex_match = doc! {

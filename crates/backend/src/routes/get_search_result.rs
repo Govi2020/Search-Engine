@@ -74,8 +74,7 @@ pub async fn get_search_result(
 
     let start = Instant::now();
 
-    // Single round-trip: fetch all entries for every query word at once,
-    // projecting out the unused images field.
+
     let query_entry_list: Vec<Entry> = database::get_entries_batch(&entries, &query_array)
         .await
         .unwrap_or_default();
