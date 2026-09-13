@@ -135,6 +135,8 @@ function App() {
           ? "http://localhost:3000/images/"
           : "http://localhost:3000/";
 
+
+
       const [searchResponse, answerResponse] = await Promise.all([
         fetch(`${searchEndpoint}?query=${encodeURIComponent(normalized)}`),
         fetch(
@@ -186,16 +188,13 @@ function App() {
         abortController.current.abort();
       }
 
-      // Create new controller
       abortController.current = new AbortController();
 
-      // Increase request number
       const currentRequest = ++requestId.current;
 
       getSuggestions(currentRequest, abortController.current.signal);
     }, 500);
 
-    // Cleanup when component unmounts
     return () => {
       clearTimeout(debounceTimer.current);
     };

@@ -9,7 +9,6 @@ use axum::{
     extract::{Query, State},
     Json,
 };
-use common::utils;
 use std::time::Instant;
 
 use crate::AppState;
